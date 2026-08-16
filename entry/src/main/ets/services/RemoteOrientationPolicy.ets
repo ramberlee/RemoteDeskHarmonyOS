@@ -1,4 +1,4 @@
-export type RemoteOrientationPolicy = 'auto-rotate' | 'landscape' | 'preserve-window';
+export type RemoteOrientationPolicy = 'auto-rotate' | 'landscape' | 'portrait' | 'preserve-window';
 
 export type RustDeskTargetDevice = 'computer' | 'phone';
 
@@ -38,13 +38,22 @@ export function canUseRustDeskAdaptiveOrientation(protocol: string, targetDevice
  * a session is active or being prepared. RDP/VNC and desktop-class layouts
  * retain their existing orientation policy. PIP must also retain the system
  * orientation because its renderer is detached from the foreground canvas.
+ *
+ * Defaults: a phone-class controller locks LANDSCAPE for desktop peers
+ * (computer screens are landscape) and PORTRAIT for phone peers (phone
+ * screens are portrait and letterbox badly in landscape). The per-host
+ * adaptive-orientation opt-in overrides both with auto-rotation.
  */
 export function rustDeskOrientationPolicy(protocol: string, isDesktopDevice: boolean,
   connected: boolean, renderPreservedInPip: boolean,
-  adaptiveOrientationEnabled: boolean = false, sessionPending: boolean = false): RemoteOrientationPolicy {
+  adaptiveOrientationEnabled: boolean = false, sessionPending: boolean = false,
+  phonePeer: boolean = false): RemoteOrientationPolicy {
   if (protocol === 'rustdesk' && !isDesktopDevice && (connected || sessionPending) &&
     !renderPreservedInPip) {
-    return adaptiveOrientationEnabled ? 'auto-rotate' : 'landscape';
+    if (adaptiveOrientationEnabled) {
+      return 'auto-rotate';
+    }
+    return phonePeer ? 'portrait' : 'landscape';
   }
   return 'preserve-window';
 }

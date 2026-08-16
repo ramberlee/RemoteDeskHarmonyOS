@@ -341,6 +341,8 @@ import {
 import { RemoteProtocol } from '../services/RemoteSessionState';
 import {
   canUseRustDeskAdaptiveOrientation,
+  isRustDeskMobilePlatform,
+  normalizeRustDeskTargetDevice,
   rustDeskOrientationPolicy
 } from '../services/RemoteOrientationPolicy';
 import {
@@ -6629,10 +6631,20 @@ struct RemoteDesktop {
     const platform: string = this.loader.getRustDeskPeerPlatform(this.sessionId);
     const version: string = this.loader.getRustDeskPeerVersion(this.sessionId);
     if (this.rustDeskPeerPlatform !== platform || this.rustDeskPeerVersion !== version) {
+      const platformJustLearned: boolean = this.rustDeskPeerPlatform.trim() === '' &&
+        platform.trim() !== '';
       this.rustDeskPeerPlatform = platform;
       this.rustDeskPeerVersion = version;
       hilog.info(RD_DOMAIN, RD_TAG,
         'rustdesk-peer-identity platform=' + platform + ' version=' + version);
+      if (platformJustLearned) {
+        // 实际对端平台已确认 (如 Android 手机): 重新应用方向策略,
+        // 即使主机配置的目标设备是 computer 也按真实平台显示。
+        this.applyRustDeskOrientationPolicy('peer-identity').catch((err: Error): void => {
+          hilog.warn(RD_DOMAIN, RD_TAG,
+            'rustdesk-orientation reapply failed: ' + JSON.stringify(err));
+        });
+      }
     }
     // Peer identity is fixed once PeerInfo arrives; stop the poll so it does
     // not keep crossing the NAPI boundary for the whole session.
@@ -10857,14 +10869,23 @@ struct RemoteDesktop {
       canUseRustDeskAdaptiveOrientation(protocol, host.rustdeskTargetDevice,
         host.rustdeskAdaptiveOrientation, host.sourceType, host.rustdeskProManaged,
         host.rustdeskProPlatform);
+    // 优先使用实际对端平台 (PeerInfo 到达后), 未知时回退主机配置的目标设备。
+    // 手机对端默认竖屏, 电脑对端默认横屏。
+    const phonePeer: boolean = this.rustDeskPeerPlatform.trim() !== '' ?
+      isRustDeskMobilePlatform(this.rustDeskPeerPlatform) :
+      (host !== null && normalizeRustDeskTargetDevice(host.rustdeskTargetDevice) === 'phone');
     const policy = rustDeskOrientationPolicy(protocol, this.isDesktopDevice,
-      this.connected, this.renderPreservedInPip, adaptiveOrientationEnabled, sessionPending);
+      this.connected, this.renderPreservedInPip, adaptiveOrientationEnabled, sessionPending,
+      phonePeer);
     if (policy === 'auto-rotate') {
       await this.setPreferredOrientation(window.Orientation.AUTO_ROTATION,
         'RUSTDESK-AUTO-ROTATION-' + reason);
     } else if (policy === 'landscape') {
       await this.setPreferredOrientation(window.Orientation.LANDSCAPE,
         'RUSTDESK-LANDSCAPE-' + reason);
+    } else if (policy === 'portrait') {
+      await this.setPreferredOrientation(window.Orientation.PORTRAIT,
+        'RUSTDESK-PORTRAIT-' + reason);
     }
   }
 

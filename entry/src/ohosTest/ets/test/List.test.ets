@@ -41,6 +41,7 @@ import remoteSurfaceTransformPolicyTest from './RemoteSurfaceTransformPolicy.tes
 import remoteCursorStylePolicyTest from './RemoteCursorStylePolicy.test';
 import rustDeskMobileActionsPolicyTest from './RustDeskMobileActionsPolicy.test';
 import remoteCanvasTouchPointPolicyTest from './RemoteCanvasTouchPointPolicy.test';
+import remoteOrientationPolicyTest from './RemoteOrientationPolicy.test';
 import remoteHostSheetLifecyclePolicyTest from './RemoteHostSheetLifecyclePolicy.test';
 import vncSessionGeometryPolicyTest from './VncSessionGeometryPolicy.test';
 import remoteFloatingPanelPlacementPolicyTest from './RemoteFloatingPanelPlacementPolicy.test';
@@ -289,6 +290,7 @@ export default function testsuite() {
   remoteCursorStylePolicyTest();
   rustDeskMobileActionsPolicyTest();
   remoteCanvasTouchPointPolicyTest();
+  remoteOrientationPolicyTest();
   remoteHostSheetLifecyclePolicyTest();
   vncSessionGeometryPolicyTest();
   remoteFloatingPanelPlacementPolicyTest();
