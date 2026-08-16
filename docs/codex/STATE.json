@@ -3,7 +3,7 @@
   "task": "rustdesk-mobile-actions",
   "branch": "codex/rustdesk-mobile-actions",
   "base": "aeb0cda",
-  "head": "cdf9c10",
+  "head": "e142f0c",
   "phase": "implementation-complete",
   "status": "active",
   "next": "Run cargo test (rustdesk_ffi) and Hvigor default@OhosTestCompileArkTS + assembleHap on the DevEco machine, then real-device Android peer validation; independent review before PR/merge.",
@@ -34,11 +34,12 @@
       "docs/codex/QUEUE.md",
       "docs/codex/DECISIONS.md"
     ],
-    "reason": "Implementation complete on codex/rustdesk-mobile-actions; independent review pending before merge."
+    "reason": "Implementation complete on codex/rustdesk-mobile-actions; FFI diff independently reviewed (compile findings fixed: test client helper peer_snapshot field, Debug-free panic). Build gates and full review pending before merge."
   },
   "lastVerification": {
     "baseline": "main@aeb0cda clean and equal to origin/main at task start",
     "diffCheck": "PASS: git diff --check exit 0 on final working tree",
+    "ffiReview": "Independent sub-agent review of rustdesk_ffi diff: one definite test-build error (fixed e142f0c) and one Debug-derive risk (fixed e142f0c); no other compile errors found statically",
     "cargoTest": "PENDING: no Rust toolchain in this environment",
     "testCompile": "PENDING: default@OhosTestCompileArkTS requires DevEco",
     "assembleHap": "PENDING: assembleHap requires DevEco",
