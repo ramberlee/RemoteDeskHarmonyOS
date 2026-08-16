@@ -3,13 +3,13 @@
   "task": "rustdesk-mobile-actions",
   "branch": "codex/rustdesk-mobile-actions",
   "base": "aeb0cda",
-  "head": "0cf503a",
-  "phase": "pr-open",
+  "head": "63fc37a1",
+  "phase": "hvigor-gates-passed",
   "status": "active",
-  "next": "Observe PR #1 open-source-compliance check; run Hvigor gates on a DevEco environment (SDK needs Huawei account); real-device Android validation; then merge PR #1 and sync main.",
-  "pr": "https://github.com/ramberlee/RemoteDeskHarmonyOS/pull/1 (open, mergeable, created 2026-08-11)",
+  "next": "Real-device validation (HarmonyOS device + Android RustDesk peer >= 1.2.7); confirm open-source-compliance manually (Actions not enabled); then merge PR #1 and sync main.",
+  "pr": "https://github.com/ramberlee/RemoteDeskHarmonyOS/pull/1 (open, created 2026-08-11)",
   "blockers": [
-    "cargo test/build PASS locally (194/194, debug+release). Hvigor default@OhosTestCompileArkTS + assembleHap require DevEco Studio with the HarmonyOS commercial SDK 6.1.0(23) (Huawei-account distribution; all public channels exhausted), and real-device validation requires an Android RustDesk peer."
+    "Real-device validation requires a HarmonyOS device to install the unsigned HAP (signing config needs a Huawei-account debug cert) and an Android RustDesk peer (>=1.2.7); neither device is connected to this environment yet."
   ],
   "planPaths": [],
   "review": {
@@ -44,6 +44,7 @@
     "staticReviews": "PASS: Rust FFI / C++ NAPI / ArkTS static reviews with all findings fixed",
     "policyRuntime": "PASS: Node 24 executed the committed RustDeskMobileActionsPolicy.ets (native TS strip), 37/37 assertions pass, 2026-08-11",
     "cargoTest": "PASS: rustc 1.97.1 x86_64-pc-windows-gnu + w64devkit + self-built libopus.a; cargo test (default features) 194 passed / 0 failed / exit 0; cargo test --no-default-features 184 passed / 0 failed; cargo build (cdylib+staticlib) exit 0; cargo build --release (LTO) exit 0; cargo test --release 194 passed / 0 failed; 2026-08-11",
+    "hvigorGates": "PASS: DevEco Studio + HarmonyOS 6.1.1(24) SDK; default@OhosTestCompileArkTS BUILD SUCCESSFUL 1m46s exit 0; assembleHap BUILD SUCCESSFUL 3m37s exit 0; unsigned HAP entry/build/default/outputs/default/entry-default-unsigned.hap (60.6MB); OHOS cross toolchain (clang 15, rustup ohos targets, opus 1.5.2 both ABIs, freerdp-ohos dae8276); 2026-08-16",
     "cppSyntax": "PASS: gcc 16.2 -fsyntax-only on rustdesk_ipc.h / protocol_adapter.h / rustdesk_bridge.h / rustdesk_bridge.cpp (OHOS stubs); ABI static_asserts (size 67, 5 offsets) and override matching verified; 2026-08-11",
     "pushed": "PASS: branch pushed to origin (head 0cf503a) through pre-push open-source-compliance hook; PR #1 created and mergeable, 2026-08-11",
     "testCompile": "PENDING: default@OhosTestCompileArkTS requires DevEco Studio + HarmonyOS SDK",

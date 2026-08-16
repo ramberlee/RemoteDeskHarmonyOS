@@ -4,10 +4,10 @@
 
 - Task: `rustdesk-mobile-actions` — 移动端客户端远程移动端交互 (复刻 RustDesk 官方移动端操作)
 - Base: `main@aeb0cda` (origin/main, clean before task)
-- Branch: `codex/rustdesk-mobile-actions` (已推送 origin, head `0cf503a`)
-- **PR #1: https://github.com/ramberlee/RemoteDeskHarmonyOS/pull/1 (open, mergeable)**
-- Phase: 实现 + 三层独立静态 review + cargo 全量验证 + C++ 编译验证 + 已推送 PR;
-  Hvigor 门禁与真机验证仍待 DevEco/Android 环境。
+- Branch: `codex/rustdesk-mobile-actions` (已推送 origin)
+- **PR #1: https://github.com/ramberlee/RemoteDeskHarmonyOS/pull/1 (open)**
+- Phase: 实现 + 三层独立静态 review + cargo 全量验证 + C++ 编译验证 +
+  **Hvigor 双门禁通过 (2026-08-16)** + 已推送 PR; 真机验证待 HarmonyOS 设备/Android 被控端。
 
 ## Context
 
@@ -44,6 +44,20 @@
 
 ## Verification
 
+- **Hvigor 门禁 (本机, 2026-08-16, DevEco Studio + HarmonyOS 6.1.1(24) SDK @ D:\Program Files\Huawei\DevEco Studio\sdk)**:
+  - `default@OhosTestCompileArkTS` (module=entry, product=default): **BUILD SUCCESSFUL in 1 min 46 s, exit 0** (仅既有 deprecation 警告)。
+  - `assembleHap` (module=entry, product=default): **BUILD SUCCESSFUL in 3 min 37 s, exit 0**;
+    产物 `entry/build/default/outputs/default/entry-default-unsigned.hap` (60.6MB,
+    未签名, "No signingConfig" 警告为预期)。
+  - native 链路: SDK clang 15 直接交叉编译 opus 1.5.2 (arm64-v8a+x86_64, 无 autotools,
+    `scripts/build_opus_ohos.sh`); rustup target aarch64/x86_64-unknown-linux-ohos +
+    cargo --release 交叉编译 rustdesk_ffi (CC/AR/linker=SDK clang/llvm-ar, sysroot 经
+    `D:\ohos-sdk` junction 规避路径空格, CFLAGS 用正斜杠避免 shlex 转义);
+    freerdp 源码头 (Mydstiny freerdp-ohos 分支 dae8276, 与 gitlink 一致) +
+    libs/freerdp-ohos 预编译; ffmpeg-ohos/openssl/libssh2 预编译就位。
+  - 本地未提交文件: local.properties (sdk.dir)、build-profile.json5 (无签名配置)、
+    D:\ohos-sdk junction、.npmrc 代理、.hvigor 包装缓存; ohpm 依赖 (hypium 1.0.24、
+    agconnect/auth 1.0.5) 已装; libs/opus-ohos 与 build/ 均为 gitignore 产物。
 - **cargo test + cargo build (本机, 2026-08-11)**: 自建 Rust 工具链 (rustup 1.97.1
   x86_64-pc-windows-gnu) + w64devkit (GCC 16.2/ld 2.47) + 自编译 libopus.a
   (opus 1.5.2, cmake/ninja via pip, 网络经代理 127.0.0.1:7897)。
@@ -78,19 +92,17 @@
 - **运行时验证 (2026-08-11, 本环境)**: 用 Node 24 原生 TS 类型剥离直接 import 已提交的
   `RustDeskMobileActionsPolicy.ets` 并执行 ohosTest 同款断言, 37/37 全部通过
   (平台识别 6、版本门禁 14、能力判定 7、操作目录 10), 退出码 0。
-- 待办 (Hvigor 门禁, 需 DevEco Studio + HarmonyOS 商业 SDK 6.1.0(23)):
-  已核实: 华为云镜像仅存旧版 OpenHarmony SDK (2.1.1/3.0.x), gitee 反爬,
-  GitHub 无官方源, developer.huawei.com 下载需华为账号登录 — 商业 SDK 在本
-  环境无法匿名获取, Hvigor 门禁不可行; 真机验证需 Android RustDesk 被控端。
+- 待办 (真机验证): HarmonyOS 设备安装 `entry-default-unsigned.hap` (未签名, 需
+  先签名或设备允许调试安装), 连接 Android RustDesk 被控端 (>=1.2.7) 验证
+  返回/主页/最近任务/音量/电源 生效; 非 Android 对端不显示。
 
 ## Next
 
-1. 观察 PR #1 的 `open-source-compliance` check（GitHub Actions, 仓库侧）。
-2. 在 DevEco 环境运行 Hvigor 门禁并记录准确输出 (SDK 需华为账号, 见 Blockers)。
-3. 真机验证 Android 被控端交互。
-4. 全部通过后 merge PR #1 → 同步 main → 删除已合并分支。
+1. 真机验证 (HarmonyOS 设备 + Android 被控端)。
+2. 确认 open-source-compliance (仓库 Actions 未启用, 人工跑 Light 或启用 Actions)。
+3. 全部通过后 merge PR #1 → 同步 main → 删除已合并分支。
 
 ## Blockers
 
-- 本地无 cargo/DevEco，构建与设备验证必须在项目 Windows 检出
-  (`C:\Users\14288\DevEcoStudioProjects\RemoteDesktop`) 或 DevEco 环境执行。
+- 真机验证需 HarmonyOS 设备 (安装 HAP) + Android RustDesk 被控端 (≥1.2.7),
+  以及签名配置 (华为账号 debug 证书)。
