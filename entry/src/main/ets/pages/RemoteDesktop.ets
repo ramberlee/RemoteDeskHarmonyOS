@@ -92,7 +92,9 @@ import { rustDeskRelayKeyModeForFfi } from '../services/RustDeskRelayKeyPolicy';
 import {
   canShowRustDeskMobileActions,
   RUSTDESK_MOBILE_ACTIONS,
-  RustDeskMobileAction
+  RustDeskMobileAction,
+  RustDeskMobileActionPlan,
+  rustDeskMobileActionPlan
 } from '../services/RustDeskMobileActionsPolicy';
 import {
   resolveRustDeskConnectionStrategy,
@@ -5163,8 +5165,8 @@ struct RemoteDesktop {
       onSetTouchpadSpeed: (speed: number): void => {
         this.setRustDeskTouchpadSpeed(speed);
       },
-      onSendMobileKey: (keyCode: number, label: string): void => {
-        this.sendRustDeskMobileKeyTap(keyCode, label);
+      onSendMobileKey: (actionId: string, label: string): void => {
+        this.sendRustDeskMobileActionTap(actionId, label);
       },
       onUnsupported: (actionId: string, reason: string): void => {
         this.toastUnsupportedRustDeskAction(actionId, reason);
@@ -6669,19 +6671,56 @@ struct RemoteDesktop {
     return canShowRustDeskMobileActions(this.rustDeskPeerPlatform, this.rustDeskPeerVersion);
   }
 
-  /** 发送 Android 导航/设备键 tap (down + up) */
-  private sendRustDeskMobileKeyTap(keyCode: number, label: string): void {
+  /**
+   * 发送 Android 移动端操作。与官方 input_model.dart 的 onMobile* 一致:
+   * 返回 = 鼠标 BACK 键 (>= 1.3.8; 更旧对端右键), 主页 = 中键单击,
+   * 最近任务 = 中键按住, 音量/电源 = Map 模式 Android key code。
+   */
+  private sendRustDeskMobileActionTap(actionId: string, label: string): void {
     if (this.sessionId <= 0) {
       return;
     }
-    try {
-      this.loader.sendRustDeskMobileKey(this.sessionId, keyCode, true);
-      this.loader.sendRustDeskMobileKey(this.sessionId, keyCode, false);
-      hilog.info(RD_DOMAIN, RD_TAG,
-        'rustdesk-mobile-key tap=' + label + ' code=' + keyCode.toString());
-    } catch (err) {
-      hilog.error(RD_DOMAIN, RD_TAG, 'rustdesk-mobile-key failed: ' + JSON.stringify(err));
+    const action: RustDeskMobileAction | undefined =
+      RUSTDESK_MOBILE_ACTIONS.find((candidate: RustDeskMobileAction): boolean =>
+        candidate.id === actionId);
+    if (!action) {
+      hilog.warn(RD_DOMAIN, RD_TAG, 'rustdesk-mobile-action unknown id=' + actionId);
+      return;
     }
+    const plan: RustDeskMobileActionPlan =
+      rustDeskMobileActionPlan(action, this.rustDeskPeerVersion);
+    try {
+      if (plan.kind === 'key-tap') {
+        this.loader.sendRustDeskMobileKey(this.sessionId, plan.keyCode, true);
+        this.loader.sendRustDeskMobileKey(this.sessionId, plan.keyCode, false);
+        hilog.info(RD_DOMAIN, RD_TAG,
+          'rustdesk-mobile-key tap=' + label + ' code=' + plan.keyCode.toString());
+      } else if (plan.kind === 'mouse-button-tap') {
+        this.sendRustDeskMobileMouseButton(plan.button, true);
+        this.sendRustDeskMobileMouseButton(plan.button, false);
+        hilog.info(RD_DOMAIN, RD_TAG,
+          'rustdesk-mobile-mouse tap=' + label + ' button=' + plan.button.toString());
+      } else {
+        this.sendRustDeskMobileMouseButton(plan.button, true);
+        hilog.info(RD_DOMAIN, RD_TAG,
+          'rustdesk-mobile-mouse hold=' + label + ' button=' + plan.button.toString() +
+          ' holdMs=' + plan.holdMs.toString());
+        setTimeout((): void => {
+          this.sendRustDeskMobileMouseButton(plan.button, false);
+        }, plan.holdMs);
+      }
+    } catch (err) {
+      hilog.error(RD_DOMAIN, RD_TAG, 'rustdesk-mobile-action failed: ' + JSON.stringify(err));
+    }
+  }
+
+  /** 直接发送鼠标按钮事件 (绕过左右键交换, 坐标锚定当前远端光标)。 */
+  private sendRustDeskMobileMouseButton(button: number, pressed: boolean): void {
+    if (!this.canForwardInput('mouseButton')) {
+      return;
+    }
+    const src = this.toSourceSpace(this.remoteCursorX, this.remoteCursorY);
+    this.loader.sendMouse(this.sessionId, src['x'], src['y'], button, pressed);
   }
 
   aboutToDisappear(): void {
@@ -15925,7 +15964,7 @@ struct RemoteDesktop {
         .border({ width: 1, color: this.pal().cardBorder })
         .margin({ left: 6, right: 6 })
         .onClick(() => {
-          this.sendRustDeskMobileKeyTap(action.keyCode, action.label);
+          this.sendRustDeskMobileActionTap(action.id, action.label);
         })
       }, (action: RustDeskMobileAction): string => action.id)
     }

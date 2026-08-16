@@ -4,11 +4,16 @@
  * 复刻 RustDesk 官方移动端客户端对 Android 被控端的操作:
  * Back / Home / Apps(最近任务) / Volume up / Volume down / Power。
  *
- * 线格式依据官方实现 (flutter/lib/models/input_model.dart 的 onMobile* 与
- * flutter/android/.../KeyboardKeyEventMapper.kt): Android 被控端在
- * Map/Translate 模式下把 KeyEvent.chr 当作 Android KeyEvent key code 注入,
- * 因此这里直接发送 Android key code
- * (3=HOME, 4=BACK, 187=APP_SWITCH, 24/25=音量, 26=电源)。
+ * 线格式依据官方实现核实 (rustdesk master):
+ * - flutter/lib/models/input_model.dart 的 onMobileBack/onMobileHome/onMobileApps:
+ *   返回 = 鼠标 BACK 键 tap (对端 >= 1.3.8; 更旧对端用右键);
+ *   主页 = 鼠标中键单击; 最近任务 = 鼠标中键按住 >= 200ms 再抬起。
+ * - flutter/android/.../InputService.kt 的掩码常量: BACK=64, WHEEL=32,
+ *   DOWN=1, UP=2; BACK_UP(66) -> GLOBAL_ACTION_BACK,
+ *   中键快速抬起 -> GLOBAL_ACTION_HOME, 中键按住 -> GLOBAL_ACTION_RECENTS。
+ * - 音量/电源 = KeyEvent{ mode: Map, chr: Android key code } (24/25/26),
+ *   被控端 InputService 的 tryHandleVolumeKeyEvent / tryHandlePowerKeyEvent
+ *   拦截执行 (与官方 HID->keycode 转换后的线格式一致)。
  *
  * 官方客户端还要求被控端版本 >= 1.2.7 才提供移动端操作。
  */
@@ -23,6 +28,17 @@ export const RUSTDESK_ANDROID_KEYCODE_POWER = 26;
 
 /** 官方客户端要求被控端版本 >= 1.2.7 才提供移动端操作。 */
 export const RUSTDESK_MOBILE_ACTIONS_MIN_PEER_VERSION = '1.2.7';
+
+/** 官方 onMobileBack 从该版本起使用鼠标 BACK 键; 更旧对端退化为右键。 */
+export const RUSTDESK_MOBILE_BACK_MIN_MOUSE_BUTTON_VERSION = '1.3.8';
+
+/** 官方 InputService LONG_TAP_DELAY=200ms: 中键按住超过该时长触发最近任务。 */
+export const RUSTDESK_MOBILE_RECENTS_HOLD_MS = 300;
+
+/** 鼠标按钮编号 (与 C++ MouseButton 枚举一致)。 */
+export const RUSTDESK_MOUSE_BUTTON_MIDDLE = 1;
+export const RUSTDESK_MOUSE_BUTTON_RIGHT = 2;
+export const RUSTDESK_MOUSE_BUTTON_BACK = 3;
 
 export type RustDeskMobileActionId =
   'back' | 'home' | 'apps' | 'volume_up' | 'volume_down' | 'power';
@@ -42,6 +58,31 @@ export const RUSTDESK_MOBILE_ACTIONS: RustDeskMobileAction[] = [
   { id: 'volume_down', label: '音量 -', keyCode: RUSTDESK_ANDROID_KEYCODE_VOLUME_DOWN },
   { id: 'power', label: '电源', keyCode: RUSTDESK_ANDROID_KEYCODE_POWER },
 ];
+
+/**
+ * 单个移动操作的具体发送计划:
+ * - key-tap: KeyEvent Map 模式 chr=Android key code, down+up (音量/电源)。
+ * - mouse-button-tap: 鼠标按钮 down+up (返回/主页)。
+ * - mouse-button-hold: 鼠标按钮 down, 保持 holdMs 后 up (最近任务)。
+ */
+export interface RustDeskMobileKeyTapPlan {
+  kind: 'key-tap';
+  keyCode: number;
+}
+
+export interface RustDeskMobileMouseTapPlan {
+  kind: 'mouse-button-tap';
+  button: number;
+}
+
+export interface RustDeskMobileMouseHoldPlan {
+  kind: 'mouse-button-hold';
+  button: number;
+  holdMs: number;
+}
+
+export type RustDeskMobileActionPlan =
+  RustDeskMobileKeyTapPlan | RustDeskMobileMouseTapPlan | RustDeskMobileMouseHoldPlan;
 
 /** PeerInfo.platform 与官方 kPeerPlatformAndroid 一致 (大小写不敏感)。 */
 export function isRustDeskAndroidPeer(platform: string): boolean {
@@ -82,4 +123,35 @@ export function canShowRustDeskMobileActions(platform: string, version: string):
     return false;
   }
   return rustDeskVersionAtLeast(version, RUSTDESK_MOBILE_ACTIONS_MIN_PEER_VERSION);
+}
+
+/**
+ * 单个操作的发送计划 (与官方 input_model.dart 的 onMobile* 一一对应):
+ * - back: >= 1.3.8 鼠标 BACK 键; 更旧对端用右键 (官方兼容策略)。
+ * - home: 鼠标中键单击。
+ * - apps: 鼠标中键按住 (>= InputService LONG_TAP_DELAY)。
+ * - volume/power: Map 模式 Android key code tap。
+ */
+export function rustDeskMobileActionPlan(action: RustDeskMobileAction,
+  peerVersion: string): RustDeskMobileActionPlan {
+  switch (action.id) {
+    case 'back':
+      return rustDeskVersionAtLeast(peerVersion, RUSTDESK_MOBILE_BACK_MIN_MOUSE_BUTTON_VERSION)
+        ? { kind: 'mouse-button-tap', button: RUSTDESK_MOUSE_BUTTON_BACK }
+        : { kind: 'mouse-button-tap', button: RUSTDESK_MOUSE_BUTTON_RIGHT };
+    case 'home':
+      return { kind: 'mouse-button-tap', button: RUSTDESK_MOUSE_BUTTON_MIDDLE };
+    case 'apps':
+      return {
+        kind: 'mouse-button-hold',
+        button: RUSTDESK_MOUSE_BUTTON_MIDDLE,
+        holdMs: RUSTDESK_MOBILE_RECENTS_HOLD_MS
+      };
+    case 'volume_up':
+      return { kind: 'key-tap', keyCode: RUSTDESK_ANDROID_KEYCODE_VOLUME_UP };
+    case 'volume_down':
+      return { kind: 'key-tap', keyCode: RUSTDESK_ANDROID_KEYCODE_VOLUME_DOWN };
+    case 'power':
+      return { kind: 'key-tap', keyCode: RUSTDESK_ANDROID_KEYCODE_POWER };
+  }
 }

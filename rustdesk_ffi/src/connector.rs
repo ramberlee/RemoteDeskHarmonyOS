@@ -2122,6 +2122,10 @@ impl RustDeskConnector {
                     0 => 0x01,
                     1 => 0x04,
                     2 => 0x02,
+                    // MouseButton::BACK: 官方 Android 被控端 InputService 在
+                    // BACK_UP 掩码 ((0x08 << 3) | 2 == 66) 时执行
+                    // GLOBAL_ACTION_BACK (移动端客户端"返回"按钮同款通道)。
+                    3 => 0x08,
                     _ => 0x01,
                 };
                 let messages = Self::build_mouse_button_messages(
@@ -4377,6 +4381,27 @@ mod tests {
             _ => panic!("mouse up must contain only a button event"),
         };
         assert_eq!((up_button.x, up_button.y, up_button.mask), (0, 0, 10));
+    }
+
+    #[test]
+    fn mouse_back_button_uses_official_android_back_mask() {
+        // 官方 Android 被控端 InputService 常量: BACK = 64, DOWN = 1, UP = 2;
+        // BACK_UP == 66 时执行 GLOBAL_ACTION_BACK。button 3 (MouseButton::BACK)
+        // 的掩码基值为 0x08, 左移 3 位后与 DOWN/UP 组合。
+        let modifiers = PhysicalModifierState::default();
+        let down = RustDeskConnector::build_mouse_button_messages(0, 0, 0x08, true, &modifiers);
+        let down_button = match &down[1].union {
+            Some(Message_oneof_union::mouse_event(mouse)) => mouse,
+            _ => panic!("mouse back down must end with a button event"),
+        };
+        assert_eq!(down_button.mask, (0x08 << 3) | 1);
+
+        let up = RustDeskConnector::build_mouse_button_messages(0, 0, 0x08, false, &modifiers);
+        let up_button = match &up[0].union {
+            Some(Message_oneof_union::mouse_event(mouse)) => mouse,
+            _ => panic!("mouse back up must contain only a button event"),
+        };
+        assert_eq!(up_button.mask, (0x08 << 3) | 2);
     }
 
     #[test]

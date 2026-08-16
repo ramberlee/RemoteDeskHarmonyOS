@@ -69,8 +69,8 @@ export interface RemoteSessionTopBarActions {
   onToggleReverseWheel: (on: boolean) => void;
   onToggleSwapMouseButtons: (on: boolean) => void;
   onSetTouchpadSpeed: (speed: number) => void;
-  /** Android 移动端导航/设备键 (Map-mode 原始 Android key code) */
-  onSendMobileKey: (keyCode: number, label: string) => void;
+  /** Android 移动端导航/设备键 (返回/主页/最近任务/音量/电源) */
+  onSendMobileKey: (actionId: string, label: string) => void;
   onUnsupported: (actionId: string, reason: string) => void;
 }
 
@@ -142,7 +142,7 @@ export struct RemoteSessionTopBar {
     onToggleReverseWheel: (_on: boolean): void => {},
     onToggleSwapMouseButtons: (_on: boolean): void => {},
     onSetTouchpadSpeed: (_speed: number): void => {},
-    onSendMobileKey: (_keyCode: number, _label: string): void => {},
+    onSendMobileKey: (_actionId: string, _label: string): void => {},
     onUnsupported: (_actionId: string, _reason: string): void => {}
   };
 
@@ -460,7 +460,7 @@ export struct RemoteSessionTopBar {
         .margin({ left: 3, right: 3 })
         .onClick((): void => {
           this.noteUserActivity();
-          this.actions.onSendMobileKey(action.keyCode, action.label);
+          this.actions.onSendMobileKey(action.id, action.label);
         })
       }, (action: RustDeskMobileAction): string => action.id)
     }

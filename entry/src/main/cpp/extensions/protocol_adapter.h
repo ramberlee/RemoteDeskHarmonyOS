@@ -41,7 +41,10 @@ enum class CodecType {
 enum class MouseButton {
     LEFT   = 0,
     MIDDLE = 1,
-    RIGHT  = 2
+    RIGHT  = 2,
+    // 官方 RustDesk Android 被控端把 BACK 掩码 (64) 映射为
+    // GLOBAL_ACTION_BACK; 移动端客户端的"返回"按钮即发送该鼠标键。
+    BACK   = 3
 };
 
 /** 连接状态 */
