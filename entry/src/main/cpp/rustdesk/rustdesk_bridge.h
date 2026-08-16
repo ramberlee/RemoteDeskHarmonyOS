@@ -193,7 +193,7 @@ public:
     bool sendTouchpadWheel(int x, int y);
     void sendText(const std::string& text) override;
     /** Android navigation/device key sent as a Map-mode raw Android key code. */
-    void sendMobileKey(uint32_t keyCode, bool pressed);
+    void sendMobileKey(uint32_t keyCode, bool pressed) override;
     /** Peer platform observed from LoginResponse/PeerInfo; empty when unknown. */
     std::string peerPlatform() override;
     /** Peer version observed from LoginResponse/PeerInfo; empty when unknown. */

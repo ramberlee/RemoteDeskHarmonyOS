@@ -196,6 +196,16 @@ static_assert(offsetof(RustDeskFfiDisplaySnapshot, geometryEpoch) == 28);
 static_assert(offsetof(RustDeskFfiDisplaySnapshot, resolutionCount) == 32);
 static_assert(sizeof(RustDeskFfiResolution) == 8,
               "RustDeskResolution ABI size changed; update both sides together");
+// Peer snapshot is u8/u8/[u8;32]/u8/[u8;32] with alignment 1 on both sides.
+static_assert(sizeof(RustDeskFfiPeerSnapshot) == 67,
+              "RustDeskPeerSnapshot ABI size changed; update both sides together");
+static_assert(alignof(RustDeskFfiPeerSnapshot) == 1,
+              "RustDeskPeerSnapshot ABI alignment changed");
+static_assert(offsetof(RustDeskFfiPeerSnapshot, available) == 0);
+static_assert(offsetof(RustDeskFfiPeerSnapshot, platform_len) == 1);
+static_assert(offsetof(RustDeskFfiPeerSnapshot, platform) == 2);
+static_assert(offsetof(RustDeskFfiPeerSnapshot, version_len) == 34);
+static_assert(offsetof(RustDeskFfiPeerSnapshot, version) == 35);
 static_assert(sizeof(RustDeskFfiDisplayInfoSnapshot) == 176,
               "RustDeskDisplayInfoSnapshot ABI size changed; update both sides together");
 static_assert(alignof(RustDeskFfiDisplayInfoSnapshot) == 4,
@@ -3091,6 +3101,9 @@ std::string RustDeskBridge::peerVersion() {
     return peerIdentity().version;
 }
 
+// Mobile actions are FFI-only today: the IPC helper drops input events and
+// peer identity is only published by the FFI core. IPC-mode callers get empty
+// strings, which the ArkTS policy layer treats as "not available".
 RustDeskPeerIdentity RustDeskBridge::peerIdentity() const {
     RustDeskPeerIdentity identity;
 #ifdef RUSTDESK_USE_REAL_CORE

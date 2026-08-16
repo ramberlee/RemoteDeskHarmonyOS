@@ -85,6 +85,10 @@ struct RdIpcKeyEvent {
 };
 
 struct RdIpcMobileKeyEvent {
+    // Wire payload is sizeof(this) = 8 (uint32 + uint8 with 3 padding bytes),
+    // exactly like RdIpcKeyEvent. The helper currently drops input events
+    // (TODO), so a future parser must read the struct size, not the 5 bytes
+    // the enum comment describes.
     uint32_t key_code;  // Android KeyEvent key code (3=HOME, 4=BACK, 187=APP_SWITCH...)
     uint8_t  pressed;   // 0=release, 1=press
 };
