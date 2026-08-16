@@ -3,16 +3,16 @@
   "task": "rustdesk-mobile-actions",
   "branch": "codex/rustdesk-mobile-actions",
   "base": "aeb0cda",
-  "head": "e142f0c",
-  "phase": "implementation-complete",
+  "head": "0b8cc9f",
+  "phase": "reviewed",
   "status": "active",
-  "next": "Run cargo test (rustdesk_ffi) and Hvigor default@OhosTestCompileArkTS + assembleHap on the DevEco machine, then real-device Android peer validation; independent review before PR/merge.",
+  "next": "Run cargo test (rustdesk_ffi) and Hvigor default@OhosTestCompileArkTS + assembleHap on the DevEco machine, then real-device Android peer validation; record exact outputs, then push/PR/required check/merge.",
   "blockers": [
     "Local environment has no cargo/rustc and no DevEco Studio/hvigorw; build gates and device validation must run on the project's DevEco checkout."
   ],
   "planPaths": [],
   "review": {
-    "status": "REVIEW_REQUIRED",
+    "status": "REVIEWED",
     "taskId": "",
     "scope": [
       "rustdesk_ffi/src/lib.rs",
@@ -32,14 +32,15 @@
       "entry/src/ohosTest/ets/test/List.test.ets",
       "docs/codex/CURRENT.md",
       "docs/codex/QUEUE.md",
-      "docs/codex/DECISIONS.md"
+      "docs/codex/DECISIONS.md",
+      "docs/codex/STATE.json"
     ],
-    "reason": "Implementation complete on codex/rustdesk-mobile-actions; FFI diff independently reviewed (compile findings fixed: test client helper peer_snapshot field, Debug-free panic). Build gates and full review pending before merge."
+    "reason": "Three independent static reviews completed (Rust FFI, C++/NAPI, ArkTS). All findings fixed and committed: FFI test-helper peer_snapshot field + Debug-free panic (e142f0c); C++ override specifier + peer-snapshot ABI static_asserts + IPC payload-size doc (29f8927); ArkTS strict version-segment gate + self-stopping identity poll + prop rename (0b8cc9f). No unresolved review findings. Build gates and real-device validation remain to run on the DevEco machine."
   },
   "lastVerification": {
     "baseline": "main@aeb0cda clean and equal to origin/main at task start",
     "diffCheck": "PASS: git diff --check exit 0 on final working tree",
-    "ffiReview": "Independent sub-agent review of rustdesk_ffi diff: one definite test-build error (fixed e142f0c) and one Debug-derive risk (fixed e142f0c); no other compile errors found statically",
+    "staticReviews": "PASS: Rust FFI / C++ NAPI / ArkTS static reviews with all findings fixed",
     "cargoTest": "PENDING: no Rust toolchain in this environment",
     "testCompile": "PENDING: default@OhosTestCompileArkTS requires DevEco",
     "assembleHap": "PENDING: assembleHap requires DevEco",
