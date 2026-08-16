@@ -4,8 +4,10 @@
 
 - Task: `rustdesk-mobile-actions` — 移动端客户端远程移动端交互 (复刻 RustDesk 官方移动端操作)
 - Base: `main@aeb0cda` (origin/main, clean before task)
-- Branch: `codex/rustdesk-mobile-actions`
-- Phase: 实现 + 三层独立静态 review + **cargo test 全量通过**; Hvigor 门禁待 DevEco。
+- Branch: `codex/rustdesk-mobile-actions` (已推送 origin, head `0cf503a`)
+- **PR #1: https://github.com/ramberlee/RemoteDeskHarmonyOS/pull/1 (open, mergeable)**
+- Phase: 实现 + 三层独立静态 review + cargo 全量验证 + C++ 编译验证 + 已推送 PR;
+  Hvigor 门禁与真机验证仍待 DevEco/Android 环境。
 
 ## Context
 
@@ -51,6 +53,9 @@
   - `cargo test --no-default-features`: 184 passed; 0 failed。
   - `cargo build` (cdylib+staticlib, RUSTFLAGS=-L w64devkit gcc lib): exit 0,
     rustdesk_ffi.dll 生成。
+  - `cargo build --release` (LTO=true, opt-level=2, strip): **exit 0**,
+    release dll 3.7MB (2026-08-11)。
+  - `cargo test --release`: **194 passed / 0 failed / exit 0** (2026-08-11)。
   - 注意: 管道截断输出时 cargo 可能误报 exit 1; 以文件重定向的退出码为准。
   - 注: cdylib 链接需 `RUSTFLAGS=-L <w64devkit gcc lib dir>` 定位 libopus.a;
     cargo test 经 gcc driver 自动找到。
@@ -80,10 +85,10 @@
 
 ## Next
 
-1. 搭建 DevEco/HarmonyOS SDK 环境 (或使用具备该环境的检出) 运行
-   `default@OhosTestCompileArkTS` + `assembleHap`, 记录准确输出。
-2. 真机验证 Android 被控端交互; 必要时按官方行为修正门禁/键码。
-3. push/PR/required 合规门/merge，回到同步 main。
+1. 观察 PR #1 的 `open-source-compliance` check（GitHub Actions, 仓库侧）。
+2. 在 DevEco 环境运行 Hvigor 门禁并记录准确输出 (SDK 需华为账号, 见 Blockers)。
+3. 真机验证 Android 被控端交互。
+4. 全部通过后 merge PR #1 → 同步 main → 删除已合并分支。
 
 ## Blockers
 

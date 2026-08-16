@@ -3,12 +3,13 @@
   "task": "rustdesk-mobile-actions",
   "branch": "codex/rustdesk-mobile-actions",
   "base": "aeb0cda",
-  "head": "0b8cc9f",
-  "phase": "reviewed",
+  "head": "0cf503a",
+  "phase": "pr-open",
   "status": "active",
-  "next": "Run Hvigor default@OhosTestCompileArkTS + assembleHap (needs DevEco Studio + HarmonyOS SDK) and real-device Android peer validation; record exact outputs, then push/PR/required check/merge.",
+  "next": "Observe PR #1 open-source-compliance check; run Hvigor gates on a DevEco environment (SDK needs Huawei account); real-device Android validation; then merge PR #1 and sync main.",
+  "pr": "https://github.com/ramberlee/RemoteDeskHarmonyOS/pull/1 (open, mergeable, created 2026-08-11)",
   "blockers": [
-    "cargo test/build PASS locally (194/194). Remaining gates: Hvigor default@OhosTestCompileArkTS + assembleHap require DevEco Studio with the HarmonyOS commercial SDK 6.1.0(23) (distribution requires a Huawei developer account; not obtainable in this environment), and real-device validation requires an Android RustDesk peer."
+    "cargo test/build PASS locally (194/194, debug+release). Hvigor default@OhosTestCompileArkTS + assembleHap require DevEco Studio with the HarmonyOS commercial SDK 6.1.0(23) (Huawei-account distribution; all public channels exhausted), and real-device validation requires an Android RustDesk peer."
   ],
   "planPaths": [],
   "review": {
@@ -42,8 +43,9 @@
     "diffCheck": "PASS: git diff --check exit 0 on final working tree",
     "staticReviews": "PASS: Rust FFI / C++ NAPI / ArkTS static reviews with all findings fixed",
     "policyRuntime": "PASS: Node 24 executed the committed RustDeskMobileActionsPolicy.ets (native TS strip), 37/37 assertions pass, 2026-08-11",
-    "cargoTest": "PASS: rustc 1.97.1 x86_64-pc-windows-gnu + w64devkit + self-built libopus.a; cargo test (default features) 194 passed / 0 failed / exit 0; cargo test --no-default-features 184 passed / 0 failed; cargo build (cdylib+staticlib) exit 0; 2026-08-11",
+    "cargoTest": "PASS: rustc 1.97.1 x86_64-pc-windows-gnu + w64devkit + self-built libopus.a; cargo test (default features) 194 passed / 0 failed / exit 0; cargo test --no-default-features 184 passed / 0 failed; cargo build (cdylib+staticlib) exit 0; cargo build --release (LTO) exit 0; cargo test --release 194 passed / 0 failed; 2026-08-11",
     "cppSyntax": "PASS: gcc 16.2 -fsyntax-only on rustdesk_ipc.h / protocol_adapter.h / rustdesk_bridge.h / rustdesk_bridge.cpp (OHOS stubs); ABI static_asserts (size 67, 5 offsets) and override matching verified; 2026-08-11",
+    "pushed": "PASS: branch pushed to origin (head 0cf503a) through pre-push open-source-compliance hook; PR #1 created and mergeable, 2026-08-11",
     "testCompile": "PENDING: default@OhosTestCompileArkTS requires DevEco Studio + HarmonyOS SDK",
     "assembleHap": "PENDING: assembleHap requires DevEco Studio + HarmonyOS SDK",
     "lightCompliance": "PENDING"
