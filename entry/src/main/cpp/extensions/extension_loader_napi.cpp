@@ -7861,6 +7861,82 @@ napi_value NapiGetRustDeskLastError(napi_env env, napi_callback_info /*info*/) {
 }
 
 /**
+ * NAPI: sendRustDeskMobileKey(sessionId: number, keyCode: number, pressed: boolean): void
+ * 发送 Android 移动端导航/设备键 (Map-mode 原始 Android key code)。
+ * 仅 RustDesk 连接 Android 被控端时生效; 其他协议/会话为 no-op。
+ */
+napi_value NapiSendRustDeskMobileKey(napi_env env, napi_callback_info info) {
+    size_t argc = 3;
+    napi_value args[3];
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    int32_t sessionId, keyCode;
+    bool pressed;
+    napi_get_value_int32(env, args[0], &sessionId);
+    napi_get_value_int32(env, args[1], &keyCode);
+    napi_get_value_bool(env, args[2], &pressed);
+
+    auto it = g_sessionRegistry.find(sessionId);
+    if (it != g_sessionRegistry.end() && it->second->adapter) {
+        it->second->adapter->sendMobileKey(static_cast<uint32_t>(keyCode), pressed);
+    } else {
+        OH_LOG_DEBUG(LOG_APP,
+            "[ExtLoader] sendRustDeskMobileKey ignored: session=%{public}d not found",
+            sessionId);
+    }
+
+    napi_value undefined;
+    napi_get_undefined(env, &undefined);
+    return undefined;
+}
+
+/**
+ * NAPI: getRustDeskPeerPlatform(sessionId: number): string
+ * 返回 RustDesk PeerInfo 中的对端平台 (如 "Android"); 未就绪时为空字符串。
+ */
+napi_value NapiGetRustDeskPeerPlatform(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value args[1];
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    int32_t sessionId;
+    napi_get_value_int32(env, args[0], &sessionId);
+
+    std::string platform;
+    auto it = g_sessionRegistry.find(sessionId);
+    if (it != g_sessionRegistry.end() && it->second->adapter) {
+        platform = it->second->adapter->peerPlatform();
+    }
+
+    napi_value result;
+    napi_create_string_utf8(env, platform.c_str(), NAPI_AUTO_LENGTH, &result);
+    return result;
+}
+
+/**
+ * NAPI: getRustDeskPeerVersion(sessionId: number): string
+ * 返回 RustDesk PeerInfo 中的对端版本 (如 "1.2.7"); 未就绪时为空字符串。
+ */
+napi_value NapiGetRustDeskPeerVersion(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value args[1];
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    int32_t sessionId;
+    napi_get_value_int32(env, args[0], &sessionId);
+
+    std::string version;
+    auto it = g_sessionRegistry.find(sessionId);
+    if (it != g_sessionRegistry.end() && it->second->adapter) {
+        version = it->second->adapter->peerVersion();
+    }
+
+    napi_value result;
+    napi_create_string_utf8(env, version.c_str(), NAPI_AUTO_LENGTH, &result);
+    return result;
+}
+
+/**
  * NAPI: readData(sessionId: number): string
  *
  * 从 SSH 会话读取终端输出数据 (加密通道).
@@ -9608,6 +9684,18 @@ napi_value ExtensionLoaderNapi::Init(napi_env env, napi_value exports) {
     napi_create_function(env, "sendKey", NAPI_AUTO_LENGTH,
                          NapiSendKey, nullptr, &fn);
     napi_set_named_property(env, exports, "sendKey", fn);
+
+    napi_create_function(env, "sendRustDeskMobileKey", NAPI_AUTO_LENGTH,
+                         NapiSendRustDeskMobileKey, nullptr, &fn);
+    napi_set_named_property(env, exports, "sendRustDeskMobileKey", fn);
+
+    napi_create_function(env, "getRustDeskPeerPlatform", NAPI_AUTO_LENGTH,
+                         NapiGetRustDeskPeerPlatform, nullptr, &fn);
+    napi_set_named_property(env, exports, "getRustDeskPeerPlatform", fn);
+
+    napi_create_function(env, "getRustDeskPeerVersion", NAPI_AUTO_LENGTH,
+                         NapiGetRustDeskPeerVersion, nullptr, &fn);
+    napi_set_named_property(env, exports, "getRustDeskPeerVersion", fn);
 
     napi_create_function(env, "sendMouse", NAPI_AUTO_LENGTH,
                          NapiSendMouse, nullptr, &fn);

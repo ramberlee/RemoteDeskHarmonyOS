@@ -89,6 +89,7 @@ import {
 } from '../services/VncSessionSettingsPolicy';
 import { RustDeskRelayConfig } from '../model/RustDeskRelayConfig';
 import { rustDeskRelayKeyModeForFfi } from '../services/RustDeskRelayKeyPolicy';
+import { canShowRustDeskMobileActions } from '../services/RustDeskMobileActionsPolicy';
 import {
   resolveRustDeskConnectionStrategy,
   rustDeskConnectionStrategyForHost,
@@ -789,6 +790,10 @@ struct RemoteDesktop {
   @State rustDeskDisplayPendingResolution: RustDeskDisplayResolution = EMPTY_RUSTDESK_DISPLAY_RESOLUTION;
   @State showRustDeskDisplayResolutionMenu: boolean = false;
   @State localResourceStats: LocalResourceStats = EMPTY_LOCAL_RESOURCE_STATS;
+  // RustDesk PeerInfo 对端身份 (移动端远程移动端操作能力判断)
+  @State rustDeskPeerPlatform: string = '';
+  @State rustDeskPeerVersion: string = '';
+  private rustDeskPeerIdentityTimer: number = -1;
   @State rustDeskAuthChoice: RustDeskAuthChoice = 'password';
   @State rustDeskAuthPasswordInput: string = '';
   @State rustDeskAuthPasswordMode: number = 0;
@@ -5153,6 +5158,9 @@ struct RemoteDesktop {
       onSetTouchpadSpeed: (speed: number): void => {
         this.setRustDeskTouchpadSpeed(speed);
       },
+      onSendMobileKey: (keyCode: number, label: string): void => {
+        this.sendRustDeskMobileKeyTap(keyCode, label);
+      },
       onUnsupported: (actionId: string, reason: string): void => {
         this.toastUnsupportedRustDeskAction(actionId, reason);
       }
@@ -6598,6 +6606,69 @@ struct RemoteDesktop {
     }
   }
 
+  // ============================================================
+  // RustDesk 对端身份轮询 (移动端远程移动端操作能力)
+  // ============================================================
+
+  private refreshRustDeskPeerIdentity(): void {
+    if (this.sessionId <= 0 || !this.connected) {
+      return;
+    }
+    const platform: string = this.loader.getRustDeskPeerPlatform(this.sessionId);
+    const version: string = this.loader.getRustDeskPeerVersion(this.sessionId);
+    if (this.rustDeskPeerPlatform !== platform || this.rustDeskPeerVersion !== version) {
+      this.rustDeskPeerPlatform = platform;
+      this.rustDeskPeerVersion = version;
+      hilog.info(RD_DOMAIN, RD_TAG,
+        'rustdesk-peer-identity platform=' + platform + ' version=' + version);
+    }
+  }
+
+  private startRustDeskPeerIdentityPolling(): void {
+    if (this.rustDeskPeerIdentityTimer >= 0 || this.sessionId <= 0) {
+      return;
+    }
+    this.refreshRustDeskPeerIdentity();
+    this.rustDeskPeerIdentityTimer = setInterval((): void => {
+      if (this.sessionId <= 0 || !this.connected) {
+        this.stopRustDeskPeerIdentityPolling();
+        return;
+      }
+      this.refreshRustDeskPeerIdentity();
+    }, 1000);
+  }
+
+  private stopRustDeskPeerIdentityPolling(): void {
+    if (this.rustDeskPeerIdentityTimer >= 0) {
+      clearInterval(this.rustDeskPeerIdentityTimer);
+      this.rustDeskPeerIdentityTimer = -1;
+    }
+    if (!this.connected) {
+      this.rustDeskPeerPlatform = '';
+      this.rustDeskPeerVersion = '';
+    }
+  }
+
+  /** 对端是 Android 且版本满足官方移动端操作门禁 */
+  private rustDeskMobileActionsAvailable(): boolean {
+    return canShowRustDeskMobileActions(this.rustDeskPeerPlatform, this.rustDeskPeerVersion);
+  }
+
+  /** 发送 Android 导航/设备键 tap (down + up) */
+  private sendRustDeskMobileKeyTap(keyCode: number, label: string): void {
+    if (this.sessionId <= 0) {
+      return;
+    }
+    try {
+      this.loader.sendRustDeskMobileKey(this.sessionId, keyCode, true);
+      this.loader.sendRustDeskMobileKey(this.sessionId, keyCode, false);
+      hilog.info(RD_DOMAIN, RD_TAG,
+        'rustdesk-mobile-key tap=' + label + ' code=' + keyCode.toString());
+    } catch (err) {
+      hilog.error(RD_DOMAIN, RD_TAG, 'rustdesk-mobile-key failed: ' + JSON.stringify(err));
+    }
+  }
+
   aboutToDisappear(): void {
     this.clearVncToolbarAutoCollapse();
     this.releaseCanvasPinchInput('page-disappear');
@@ -6613,6 +6684,7 @@ struct RemoteDesktop {
     this.remotePointerFocusRecoveryNeeded = false;
     this.releaseAllHeldKeys();
     this.stopRustDeskDiagnosticsPolling(true);
+    this.stopRustDeskPeerIdentityPolling();
     this.stopRdpDiagnosticsPolling(true);
     this.clearRdpTransferStatusPolling(false);
     try {
@@ -10505,6 +10577,9 @@ struct RemoteDesktop {
       this.connectionProgressMessage = '';
       this.connectionError = '';
       this.connectionErrorDetail = '';
+      if (host.protocol === 'rustdesk') {
+        this.startRustDeskPeerIdentityPolling();
+      }
       if (host.protocol === 'vnc') {
         this.vncToolbarCollapsed = false;
         this.scheduleVncToolbarAutoCollapse(sid);
@@ -15246,6 +15321,7 @@ struct RemoteDesktop {
           rustDeskDisplaySwitchState: this.rustDeskDisplaySwitchState,
           pendingDisplayResolution: this.rustDeskDisplayPendingResolution,
           capabilities: this.currentSessionCapabilities(),
+          peerIsAndroid: this.rustDeskMobileActionsAvailable(),
           actions: this.rustDeskTopBarActions()
         })
       }

@@ -20,6 +20,12 @@ declare module 'librdpnapi.so' {
   export function getDisconnectState(requestId: number): number;
 
   export function sendKey(sessionId: number, scancode: number, pressed: boolean): void;
+  /** Android 移动端导航/设备键 (Map-mode 原始 Android key code)。仅 RustDesk Android 被控端生效。 */
+  export function sendRustDeskMobileKey(sessionId: number, keyCode: number, pressed: boolean): void;
+  /** RustDesk PeerInfo 中的对端平台 (如 "Android"); 未就绪时为空字符串。 */
+  export function getRustDeskPeerPlatform(sessionId: number): string;
+  /** RustDesk PeerInfo 中的对端版本 (如 "1.2.7"); 未就绪时为空字符串。 */
+  export function getRustDeskPeerVersion(sessionId: number): string;
   export function sendMouse(sessionId: number, x: number, y: number, button: number, pressed: boolean): void;
   export function sendMouseWheel(sessionId: number, x: number, y: number, delta: number): void;
   export function sendRustDeskTouchpadWheel(sessionId: number, x: number, y: number): boolean;

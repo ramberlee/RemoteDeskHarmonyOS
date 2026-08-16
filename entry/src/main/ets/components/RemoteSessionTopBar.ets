@@ -5,6 +5,10 @@ import {
 } from '../services/RemoteSessionTopBarPolicy';
 import { RemoteSessionCapabilities } from '../services/RemoteSessionCapabilityPolicy';
 import {
+  RUSTDESK_MOBILE_ACTIONS,
+  RustDeskMobileAction
+} from '../services/RustDeskMobileActionsPolicy';
+import {
   RustDeskDisplayCapabilities,
   RustDeskDisplayInfo,
   RustDeskDisplayResolution
@@ -65,6 +69,8 @@ export interface RemoteSessionTopBarActions {
   onToggleReverseWheel: (on: boolean) => void;
   onToggleSwapMouseButtons: (on: boolean) => void;
   onSetTouchpadSpeed: (speed: number) => void;
+  /** Android 移动端导航/设备键 (Map-mode 原始 Android key code) */
+  onSendMobileKey: (keyCode: number, label: string) => void;
   onUnsupported: (actionId: string, reason: string) => void;
 }
 
@@ -80,6 +86,8 @@ export struct RemoteSessionTopBar {
   };
   @Prop @Watch('onEdgeRailChanged') edgeRail: boolean = false;
   @Prop privacyMode: boolean = false;
+  /** 对端是 Android 移动设备 (版本满足官方移动端操作门禁) — 显示移动端操作区 */
+  @Prop peerIsAndroid: boolean = false;
   @Prop audioEnabled: boolean = true;
   @Prop clipboardEnabled: boolean = true;
   @Prop filePasteEnabled: boolean = true;
@@ -134,6 +142,7 @@ export struct RemoteSessionTopBar {
     onToggleReverseWheel: (_on: boolean): void => {},
     onToggleSwapMouseButtons: (_on: boolean): void => {},
     onSetTouchpadSpeed: (_speed: number): void => {},
+    onSendMobileKey: (_keyCode: number, _label: string): void => {},
     onUnsupported: (_actionId: string, _reason: string): void => {}
   };
 
@@ -409,6 +418,13 @@ export struct RemoteSessionTopBar {
   @Builder
   private controlMenu() {
     Column() {
+      if (this.peerIsAndroid) {
+        Text('移动设备操作').fontSize(12).fontColor('#6B7280')
+          .margin({ left: 8, top: 2, bottom: 4 }).alignSelf(ItemAlign.Start)
+        this.mobileActionRow(0, 3)
+        this.mobileActionRow(3, 6)
+        Divider().strokeWidth(1).color('#E5E7EB').margin({ top: 2, bottom: 4 })
+      }
       this.menuItem('发送剪贴板按键', 'toggleClipboard', (): void => {
         this.actions.onToggleClipboard(!this.clipboardEnabled);
       }, this.clipboardEnabled)
@@ -427,6 +443,28 @@ export struct RemoteSessionTopBar {
     .borderRadius(10)
     .shadow({ radius: 10, color: 'rgba(0,0,0,0.22)', offsetY: 2 })
     .position({ x: this.menuLeft(), y: this.menuTop() })
+  }
+
+  @Builder
+  private mobileActionRow(start: number, end: number) {
+    Row() {
+      ForEach(RUSTDESK_MOBILE_ACTIONS.slice(start, end), (action: RustDeskMobileAction) => {
+        Column() {
+          Text(action.label).fontSize(12).fontColor('#111111')
+            .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .height(36).layoutWeight(1)
+        .justifyContent(FlexAlign.Center)
+        .borderRadius(6)
+        .backgroundColor('#F3F4F6')
+        .margin({ left: 3, right: 3 })
+        .onClick((): void => {
+          this.noteUserActivity();
+          this.actions.onSendMobileKey(action.keyCode, action.label);
+        })
+      }, (action: RustDeskMobileAction): string => action.id)
+    }
+    .width('100%').margin({ bottom: 6 })
   }
 
   @Builder

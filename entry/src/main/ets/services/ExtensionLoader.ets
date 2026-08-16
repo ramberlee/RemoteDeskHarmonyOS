@@ -935,6 +935,35 @@ export class ExtensionLoader {
     }
   }
 
+  /** Android 移动端导航/设备键 (Map-mode 原始 Android key code) */
+  sendRustDeskMobileKey(sessionId: number, keyCode: number, pressed: boolean): void {
+    try {
+      rdpnapi.sendRustDeskMobileKey(sessionId, keyCode, pressed);
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, '[ExtensionLoader] sendRustDeskMobileKey: ' + JSON.stringify(err));
+    }
+  }
+
+  /** RustDesk 对端平台 (如 "Android"); 未就绪时为空字符串 */
+  getRustDeskPeerPlatform(sessionId: number): string {
+    try {
+      return rdpnapi.getRustDeskPeerPlatform(sessionId);
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, '[ExtensionLoader] getRustDeskPeerPlatform: ' + JSON.stringify(err));
+      return '';
+    }
+  }
+
+  /** RustDesk 对端版本 (如 "1.2.7"); 未就绪时为空字符串 */
+  getRustDeskPeerVersion(sessionId: number): string {
+    try {
+      return rdpnapi.getRustDeskPeerVersion(sessionId);
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, '[ExtensionLoader] getRustDeskPeerVersion: ' + JSON.stringify(err));
+      return '';
+    }
+  }
+
   sendMouse(sessionId: number, x: number, y: number, button: number, pressed: boolean): void {
     try {
       rdpnapi.sendMouse(sessionId, x, y, button, pressed);

@@ -39,6 +39,7 @@ enum RdIpcMsgType : uint8_t {
     RD_IPC_INPUT_MOUSE    = 0x11,  // 鼠标: {x(2), y(2), button(1), pressed(1)}
     RD_IPC_INPUT_WHEEL    = 0x12,  // 滚轮: {x(2), y(2), delta(4)}
     RD_IPC_INPUT_TEXT     = 0x13,  // 文本: {utf8_string}
+    RD_IPC_INPUT_MOBILE_KEY = 0x14, // Android 移动端导航/设备键: {key_code(4), pressed(1)}
 
     // 媒体流 (0x20–0x2F)
     RD_IPC_VIDEO_FRAME    = 0x20,  // 视频帧: {data, size, width, height, codec, timestamp, keyframe}
@@ -80,6 +81,11 @@ struct RdIpcConnectReq {
 // ---- 输入事件 payload ----
 struct RdIpcKeyEvent {
     uint32_t scancode;
+    uint8_t  pressed;   // 0=release, 1=press
+};
+
+struct RdIpcMobileKeyEvent {
+    uint32_t key_code;  // Android KeyEvent key code (3=HOME, 4=BACK, 187=APP_SWITCH...)
     uint8_t  pressed;   // 0=release, 1=press
 };
 
