@@ -27,6 +27,8 @@
   `getRustDeskPeerVersion`; ArkTS 侧新增 `RustDeskMobileActionsPolicy`、
   RemoteDesktop 对端身份轮询、RemoteSessionTopBar "移动设备操作" 区
   (2×3 网格: 返回/主页/最近任务/音量+/音量-/电源)。
+- 可达性覆盖: Pad/PC 及手机键鼠模式经顶栏控制菜单; 手机触摸/触控板模式
+  顶栏隐藏, 移动设备操作同时接入三指控制面板 (始终可达)。
 
 ## Scope
 
