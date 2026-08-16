@@ -4752,7 +4752,7 @@ mod tests {
                     assert_eq!(key_event.get_down(), pressed);
                     assert!(!key_event.has_control_key());
                 }
-                other => panic!("mobile key must produce a KeyEvent, got: {:?}", other),
+                _ => panic!("mobile key must produce a KeyEvent message"),
             }
         }
     }

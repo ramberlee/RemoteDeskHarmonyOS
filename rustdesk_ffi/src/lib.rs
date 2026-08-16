@@ -2934,6 +2934,7 @@ mod tests {
             remote_clipboard: Arc::new(Mutex::new(Vec::new())),
             stream_stats: Arc::new(Mutex::new(RustDeskStreamStats::default())),
             display_state: Arc::new(Mutex::new(display_state)),
+            peer_snapshot: Arc::new(Mutex::new(RustDeskPeerSnapshot::default())),
         }
     }
 
