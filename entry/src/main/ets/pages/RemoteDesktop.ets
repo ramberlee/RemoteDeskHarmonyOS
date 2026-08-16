@@ -6541,6 +6541,11 @@ struct RemoteDesktop {
       this.startRdpTransferStatusPolling(this.sessionId, this.connectAttemptId);
       return;
     }
+    // Peer identity polling is independent of the diagnostics dock; restart it
+    // even when diagnostics are hidden so the mobile action toolbar refreshes.
+    if (this.connected) {
+      this.startRustDeskPeerIdentityPolling();
+    }
     if (!this.shouldShowActiveDiagnostics()) {
       return;
     }
@@ -6550,9 +6555,6 @@ struct RemoteDesktop {
       this.initRustDeskDiagnosticsDock();
     }
     this.startRustDeskDiagnosticsPolling();
-    if (!this.isVncSession() && this.connected) {
-      this.startRustDeskPeerIdentityPolling();
-    }
     hilog.info(RD_DOMAIN, RD_TAG, 'resumeRustDeskDiagnosticsAfterForeground: polling resumed sessionId=' +
       this.sessionId.toString() + ' attemptId=' + this.connectAttemptId.toString() +
       ' pro=' + (this.rustdeskShowProDiagnostics ? 'true' : 'false'));
