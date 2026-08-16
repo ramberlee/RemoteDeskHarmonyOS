@@ -298,7 +298,8 @@ import {
 } from '../services/RemoteCanvasGesturePolicy';
 import {
   CanvasTouchPointEvent,
-  resolveCanvasActiveTouchCount
+  resolveCanvasActiveTouchCount,
+  shouldMarkTouchMoved
 } from '../services/RemoteCanvasTouchPointPolicy';
 import {
   baseCanvasTransform,
@@ -13777,9 +13778,19 @@ struct RemoteDesktop {
         this.touchLastLocalY = movePoint.y;
         const dx: number = movePoint.x - this.touchStartLocalX;
         const dy: number = movePoint.y - this.touchStartLocalY;
-        if (Math.sqrt(dx * dx + dy * dy) > TOUCH_CLICK_SLOP_PX) {
+        // 三指手势仅在全部手指按下期间计为移动; 手指逐根抬起时剩余触点
+        // 的质心跳变不是用户移动, 否则会吞掉三指点击 (控制面板开关)。
+        if (Math.sqrt(dx * dx + dy * dy) > TOUCH_CLICK_SLOP_PX &&
+          shouldMarkTouchMoved(this.touchMaxFingers, this.touchFingerCount)) {
           this.touchMoved = true;
           this.clearTouchRightClickTimer();
+        }
+
+        if (this.touchMaxFingers >= 3) {
+          // 三指手势不触发双指平移/滚动: 抬起过程中剩余触点的质心跳变会被
+          // 双指滚动路径误判为滚轮并置 touchMoved=true, 导致三指点击
+          // 时灵时不灵。三指移动只更新 touchMoved 供点击/拖动区分。
+          return;
         }
 
         if (this.touchFingerCount >= 2) {
@@ -13988,6 +13999,22 @@ struct RemoteDesktop {
         this.startDirectTouchRightClickTimer();
       } else if (event.type === TouchType.Move) {
         this.touchFingerCount = this.trackedCanvasTouchCount(event);
+        if (this.touchMaxFingers >= 3) {
+          // 三指手势不触发双指平移/滚动 (同 touchpad 模式): 抬起过程中
+          // 剩余触点的质心跳变会被双指滚动/平移路径误判并置
+          // touchMoved=true, 导致三指点击时灵时不灵。只更新移动判定。
+          const avg: LocalPoint | null = this.averageTouchPoint(event);
+          if (avg !== null) {
+            const dx: number = avg.x - this.touchStartLocalX;
+            const dy: number = avg.y - this.touchStartLocalY;
+            if (Math.sqrt(dx * dx + dy * dy) > TOUCH_CLICK_SLOP_PX &&
+              shouldMarkTouchMoved(this.touchMaxFingers, this.touchFingerCount)) {
+              this.touchMoved = true;
+              this.touchDragPending = false;
+            }
+          }
+          return;
+        }
         if (this.touchMaxFingers >= 2) {
           const avg: LocalPoint | null = this.averageTouchPoint(event);
           if (avg) {
@@ -14011,7 +14038,10 @@ struct RemoteDesktop {
             }
             const dx: number = avg.x - this.touchStartLocalX;
             const dy: number = avg.y - this.touchStartLocalY;
-            if (Math.sqrt(dx * dx + dy * dy) > TOUCH_CLICK_SLOP_PX) {
+            // 三指手势仅在全部手指按下期间计为移动; 手指逐根抬起时剩余触点
+            // 的质心跳变不是用户移动, 否则会吞掉三指点击 (控制面板开关)。
+            if (Math.sqrt(dx * dx + dy * dy) > TOUCH_CLICK_SLOP_PX &&
+              shouldMarkTouchMoved(this.touchMaxFingers, this.touchFingerCount)) {
               this.touchMoved = true;
               this.touchDragPending = false;
             }
