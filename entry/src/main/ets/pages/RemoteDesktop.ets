@@ -6550,6 +6550,9 @@ struct RemoteDesktop {
       this.initRustDeskDiagnosticsDock();
     }
     this.startRustDeskDiagnosticsPolling();
+    if (!this.isVncSession() && this.connected) {
+      this.startRustDeskPeerIdentityPolling();
+    }
     hilog.info(RD_DOMAIN, RD_TAG, 'resumeRustDeskDiagnosticsAfterForeground: polling resumed sessionId=' +
       this.sessionId.toString() + ' attemptId=' + this.connectAttemptId.toString() +
       ' pro=' + (this.rustdeskShowProDiagnostics ? 'true' : 'false'));
