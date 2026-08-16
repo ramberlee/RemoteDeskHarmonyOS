@@ -161,4 +161,3 @@ project's FFI keeps that contract: `rustdesk_send_mobile_key` emits a Map-mode
 `chr` KeyEvent and never reuses the desktop keyboard transport. Do not encode
 Android navigation keys as `ControlKey` or Legacy `chr` characters, and do not
 show the mobile action toolbar for non-Android peers.
-
