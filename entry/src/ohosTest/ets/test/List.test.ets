@@ -39,6 +39,7 @@ import touchpadPointerCurvePolicyTest from './TouchpadPointerCurvePolicy.test';
 import remotePhysicalTouchpadPolicyTest from '../../../test/RemotePhysicalTouchpadPolicy.test';
 import remoteSurfaceTransformPolicyTest from './RemoteSurfaceTransformPolicy.test';
 import remoteCursorStylePolicyTest from './RemoteCursorStylePolicy.test';
+import rustDeskMobileActionsPolicyTest from './RustDeskMobileActionsPolicy.test';
 import remoteHostSheetLifecyclePolicyTest from './RemoteHostSheetLifecyclePolicy.test';
 import vncSessionGeometryPolicyTest from './VncSessionGeometryPolicy.test';
 import remoteFloatingPanelPlacementPolicyTest from './RemoteFloatingPanelPlacementPolicy.test';
@@ -285,6 +286,7 @@ export default function testsuite() {
   remotePhysicalTouchpadPolicyTest();
   remoteSurfaceTransformPolicyTest();
   remoteCursorStylePolicyTest();
+  rustDeskMobileActionsPolicyTest();
   remoteHostSheetLifecyclePolicyTest();
   vncSessionGeometryPolicyTest();
   remoteFloatingPanelPlacementPolicyTest();
