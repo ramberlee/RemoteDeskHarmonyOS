@@ -54,6 +54,18 @@
   - 注意: 管道截断输出时 cargo 可能误报 exit 1; 以文件重定向的退出码为准。
   - 注: cdylib 链接需 `RUSTFLAGS=-L <w64devkit gcc lib dir>` 定位 libopus.a;
     cargo test 经 gcc driver 自动找到。
+- **C++ 编译级验证 (本机, 2026-08-11)**: 用 w64devkit gcc (GCC 16.2) 对本次改动的
+  C++ 头文件/实现做 `-fsyntax-only -std=c++17` 真实语法编译 (OHOS 专用头
+  hilog/socket 以最小 stub 替代):
+  - `rustdesk_ipc.h` (新枚举 0x14 + RdIpcMobileKeyEvent): exit 0。
+  - `protocol_adapter.h` (3 个新默认虚函数): exit 0 (含完整依赖头链)。
+  - `rustdesk_bridge.h` (RustDeskPeerIdentity + 4 个新方法声明): exit 0。
+  - `rustdesk_bridge.cpp` (sendMobileKey/peerPlatform/peerVersion/peerIdentity
+    实现 + extern "C" 声明 + ABI static_assert): exit 0 — static_assert 在
+    语法检查时真实求值, sizeof(RustDeskFfiPeerSnapshot)==67 与 5 个 offsetof
+    断言全部通过; `override` 签名匹配经基类虚函数校验。
+  - 注: extension_loader_napi.cpp 依赖 60+ 个 N-API 符号, stub 成本过高;
+    其新增代码与既有 NapiSendKey 模式逐字一致且经静态 review。
 - 三路独立静态 review (Rust FFI、C++/NAPI、ArkTS) 全部完成, 无未解决发现:
   - Rust: `test_client_with_display_state` 缺新字段 (E0063)、panic `{:?}` Debug 风险 → 已修 (e142f0c)。
   - C++: `sendMobileKey` 缺 `override`、peer snapshot 缺 ABI static_assert、IPC payload 8 字节 padding 文档 → 已修 (29f8927)。
@@ -62,9 +74,9 @@
   `RustDeskMobileActionsPolicy.ets` 并执行 ohosTest 同款断言, 37/37 全部通过
   (平台识别 6、版本门禁 14、能力判定 7、操作目录 10), 退出码 0。
 - 待办 (Hvigor 门禁, 需 DevEco Studio + HarmonyOS 商业 SDK 6.1.0(23)):
-  1. `default@OhosTestCompileArkTS` + `assembleHap` (module=entry, product=default)。
-  2. 真机验证: 连接 Android 被控端后顶栏/三指控制面板"移动设备操作"出现并可发送
-     返回/主页/最近任务/音量/电源; 非 Android 对端不显示。
+  已核实: 华为云镜像仅存旧版 OpenHarmony SDK (2.1.1/3.0.x), gitee 反爬,
+  GitHub 无官方源, developer.huawei.com 下载需华为账号登录 — 商业 SDK 在本
+  环境无法匿名获取, Hvigor 门禁不可行; 真机验证需 Android RustDesk 被控端。
 
 ## Next
 
