@@ -48,18 +48,21 @@ export function isRustDeskAndroidPeer(platform: string): boolean {
   return platform.trim().toLowerCase() === 'android';
 }
 
-/** 逐段数值比较版本号: "1.2.7" >= "1.2.7"; 解析失败返回 false。 */
+/** 逐段数值比较版本号: "1.2.7" >= "1.2.7"; 非纯数字段 (如 "1.2.7-rc1") 返回 false。 */
 export function rustDeskVersionAtLeast(version: string, minimum: string): boolean {
   const normalize = (value: string): string => value.trim().replace(/^[vV]/, '');
   const a: string[] = normalize(version).split('.');
   const b: string[] = normalize(minimum).split('.');
   const len: number = Math.max(a.length, b.length);
   for (let i = 0; i < len; i++) {
-    const av: number = i < a.length ? parseInt(a[i], 10) : 0;
-    const bv: number = i < b.length ? parseInt(b[i], 10) : 0;
-    if (isNaN(av) || isNaN(bv)) {
+    const segmentA: string = i < a.length ? a[i] : '0';
+    const segmentB: string = i < b.length ? b[i] : '0';
+    // 只接受纯数字段: 预发布/后缀版本 (1.2.7-rc1, 1.2.7beta) 不通过门禁。
+    if (!/^\d+$/.test(segmentA) || !/^\d+$/.test(segmentB)) {
       return false;
     }
+    const av: number = parseInt(segmentA, 10);
+    const bv: number = parseInt(segmentB, 10);
     if (av !== bv) {
       return av > bv;
     }

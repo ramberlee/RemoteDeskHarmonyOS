@@ -6631,6 +6631,11 @@ struct RemoteDesktop {
       hilog.info(RD_DOMAIN, RD_TAG,
         'rustdesk-peer-identity platform=' + platform + ' version=' + version);
     }
+    // Peer identity is fixed once PeerInfo arrives; stop the poll so it does
+    // not keep crossing the NAPI boundary for the whole session.
+    if (platform !== '') {
+      this.stopRustDeskPeerIdentityPolling();
+    }
   }
 
   private startRustDeskPeerIdentityPolling(): void {
@@ -15330,7 +15335,7 @@ struct RemoteDesktop {
           rustDeskDisplaySwitchState: this.rustDeskDisplaySwitchState,
           pendingDisplayResolution: this.rustDeskDisplayPendingResolution,
           capabilities: this.currentSessionCapabilities(),
-          peerIsAndroid: this.rustDeskMobileActionsAvailable(),
+          peerMobileActionsEnabled: this.rustDeskMobileActionsAvailable(),
           actions: this.rustDeskTopBarActions()
         })
       }

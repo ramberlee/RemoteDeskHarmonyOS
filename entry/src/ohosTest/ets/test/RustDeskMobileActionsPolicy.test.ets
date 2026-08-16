@@ -37,6 +37,10 @@ export default function rustDeskMobileActionsPolicyTest(): void {
       expect(rustDeskVersionAtLeast('abc', RUSTDESK_MOBILE_ACTIONS_MIN_PEER_VERSION)).assertFalse();
       expect(rustDeskVersionAtLeast('1.2.x', RUSTDESK_MOBILE_ACTIONS_MIN_PEER_VERSION)).assertFalse();
       expect(rustDeskVersionAtLeast('', RUSTDESK_MOBILE_ACTIONS_MIN_PEER_VERSION)).assertFalse();
+      // Pre-release / suffixed segments must not pass the numeric gate.
+      expect(rustDeskVersionAtLeast('1.2.7-rc1', RUSTDESK_MOBILE_ACTIONS_MIN_PEER_VERSION)).assertFalse();
+      expect(rustDeskVersionAtLeast('1.2.7beta', RUSTDESK_MOBILE_ACTIONS_MIN_PEER_VERSION)).assertFalse();
+      expect(rustDeskVersionAtLeast('v1.2.7', RUSTDESK_MOBILE_ACTIONS_MIN_PEER_VERSION)).assertTrue();
     });
 
     it('shows_mobile_actions_only_for_android_peers_at_or_above_1_2_7', 0, (): void => {

@@ -86,8 +86,8 @@ export struct RemoteSessionTopBar {
   };
   @Prop @Watch('onEdgeRailChanged') edgeRail: boolean = false;
   @Prop privacyMode: boolean = false;
-  /** 对端是 Android 移动设备 (版本满足官方移动端操作门禁) — 显示移动端操作区 */
-  @Prop peerIsAndroid: boolean = false;
+  /** 对端是 Android 且版本满足官方移动端操作门禁 (>= 1.2.7) — 显示移动设备操作区 */
+  @Prop peerMobileActionsEnabled: boolean = false;
   @Prop audioEnabled: boolean = true;
   @Prop clipboardEnabled: boolean = true;
   @Prop filePasteEnabled: boolean = true;
@@ -418,7 +418,7 @@ export struct RemoteSessionTopBar {
   @Builder
   private controlMenu() {
     Column() {
-      if (this.peerIsAndroid) {
+      if (this.peerMobileActionsEnabled) {
         Text('移动设备操作').fontSize(12).fontColor('#6B7280')
           .margin({ left: 8, top: 2, bottom: 4 }).alignSelf(ItemAlign.Start)
         this.mobileActionRow(0, 3)
