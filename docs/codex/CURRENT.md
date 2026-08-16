@@ -42,14 +42,18 @@
 
 ## Verification
 
-- **cargo test (本机, 2026-08-11)**: 自建 Rust 工具链 (rustup 1.97.1
+- **cargo test + cargo build (本机, 2026-08-11)**: 自建 Rust 工具链 (rustup 1.97.1
   x86_64-pc-windows-gnu) + w64devkit (GCC 16.2/ld 2.47) + 自编译 libopus.a
-  (opus 1.5.2, cmake/ninja)。`cargo test` 默认 features:
-  **194 passed; 0 failed; exit 0** (含新增
-  `connector::tests::mobile_key_uses_map_mode_with_android_keycode` 与
-  `connector::tests::peer_snapshot_publishes_platform_and_version_within_fixed_buffers`)。
-  `cargo test --no-default-features`: 184 passed; 0 failed。
-  注意: 管道截断输出时 cargo 可能误报 exit 1; 以文件重定向的退出码为准。
+  (opus 1.5.2, cmake/ninja via pip, 网络经代理 127.0.0.1:7897)。
+  - `cargo test` 默认 features: **194 passed; 0 failed; exit 0** (含新增
+    `connector::tests::mobile_key_uses_map_mode_with_android_keycode` 与
+    `connector::tests::peer_snapshot_publishes_platform_and_version_within_fixed_buffers`)。
+  - `cargo test --no-default-features`: 184 passed; 0 failed。
+  - `cargo build` (cdylib+staticlib, RUSTFLAGS=-L w64devkit gcc lib): exit 0,
+    rustdesk_ffi.dll 生成。
+  - 注意: 管道截断输出时 cargo 可能误报 exit 1; 以文件重定向的退出码为准。
+  - 注: cdylib 链接需 `RUSTFLAGS=-L <w64devkit gcc lib dir>` 定位 libopus.a;
+    cargo test 经 gcc driver 自动找到。
 - 三路独立静态 review (Rust FFI、C++/NAPI、ArkTS) 全部完成, 无未解决发现:
   - Rust: `test_client_with_display_state` 缺新字段 (E0063)、panic `{:?}` Debug 风险 → 已修 (e142f0c)。
   - C++: `sendMobileKey` 缺 `override`、peer snapshot 缺 ABI static_assert、IPC payload 8 字节 padding 文档 → 已修 (29f8927)。
@@ -57,7 +61,7 @@
 - **运行时验证 (2026-08-11, 本环境)**: 用 Node 24 原生 TS 类型剥离直接 import 已提交的
   `RustDeskMobileActionsPolicy.ets` 并执行 ohosTest 同款断言, 37/37 全部通过
   (平台识别 6、版本门禁 14、能力判定 7、操作目录 10), 退出码 0。
-- 待办 (Hvigor 门禁, 需 DevEco Studio + HarmonyOS SDK):
+- 待办 (Hvigor 门禁, 需 DevEco Studio + HarmonyOS 商业 SDK 6.1.0(23)):
   1. `default@OhosTestCompileArkTS` + `assembleHap` (module=entry, product=default)。
   2. 真机验证: 连接 Android 被控端后顶栏/三指控制面板"移动设备操作"出现并可发送
      返回/主页/最近任务/音量/电源; 非 Android 对端不显示。
