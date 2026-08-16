@@ -15954,7 +15954,7 @@ struct RemoteDesktop {
     Row() {
       ForEach(RUSTDESK_MOBILE_ACTIONS.slice(start, end), (action: RustDeskMobileAction) => {
         Column() {
-          Text(action.label).fontSize(13).fontColor('#111111')
+          Text(action.label).fontSize(13).fontColor(this.pal().text)
             .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         }
         .height(40).layoutWeight(1)
