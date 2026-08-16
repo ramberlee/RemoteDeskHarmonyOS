@@ -6,9 +6,9 @@
   "head": "0b8cc9f",
   "phase": "reviewed",
   "status": "active",
-  "next": "Run cargo test (rustdesk_ffi) and Hvigor default@OhosTestCompileArkTS + assembleHap on the DevEco machine, then real-device Android peer validation; record exact outputs, then push/PR/required check/merge.",
+  "next": "Run Hvigor default@OhosTestCompileArkTS + assembleHap (needs DevEco Studio + HarmonyOS SDK) and real-device Android peer validation; record exact outputs, then push/PR/required check/merge.",
   "blockers": [
-    "Local environment has no cargo/rustc and no DevEco Studio/hvigorw; build gates and device validation must run on the project's DevEco checkout."
+    "cargo test now PASSES locally (194/194, exit 0). Remaining: Hvigor gates require DevEco Studio + HarmonyOS SDK, and real-device validation requires an Android peer; neither is available in this environment yet."
   ],
   "planPaths": [],
   "review": {
@@ -42,9 +42,9 @@
     "diffCheck": "PASS: git diff --check exit 0 on final working tree",
     "staticReviews": "PASS: Rust FFI / C++ NAPI / ArkTS static reviews with all findings fixed",
     "policyRuntime": "PASS: Node 24 executed the committed RustDeskMobileActionsPolicy.ets (native TS strip), 37/37 assertions pass, 2026-08-11",
-    "cargoTest": "PENDING: no Rust toolchain in this environment",
-    "testCompile": "PENDING: default@OhosTestCompileArkTS requires DevEco",
-    "assembleHap": "PENDING: assembleHap requires DevEco",
+    "cargoTest": "PASS: rustc 1.97.1 x86_64-pc-windows-gnu + w64devkit + self-built libopus.a; cargo test (default features) 194 passed / 0 failed / exit 0; cargo test --no-default-features 184 passed / 0 failed; 2026-08-11",
+    "testCompile": "PENDING: default@OhosTestCompileArkTS requires DevEco Studio + HarmonyOS SDK",
+    "assembleHap": "PENDING: assembleHap requires DevEco Studio + HarmonyOS SDK",
     "lightCompliance": "PENDING"
   },
   "updated": "2026-08-11 Asia/Shanghai"
