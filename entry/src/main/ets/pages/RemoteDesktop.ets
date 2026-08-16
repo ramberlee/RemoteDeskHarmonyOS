@@ -15859,6 +15859,7 @@ struct RemoteDesktop {
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
     .overlay(this.passphraseOverlay(), { align: Alignment.Top })
     .bindSheet($$this.showControlPanel, this.controlPanelBuilder(), {
+      height: SheetSize.FIT_CONTENT,
       preferType: SheetType.CENTER,
       backgroundColor: this.pal().sheetBg,
       onDisappear: (): void => { this.handleControlPanelDisappear(); }
