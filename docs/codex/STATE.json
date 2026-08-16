@@ -1,38 +1,48 @@
 {
   "schema": 1,
-  "task": "privacy-permission-disclosure",
-  "branch": "codex/privacy-permission-disclosure",
-  "base": "d840e662a",
-  "head": "d840e662a",
-  "phase": "ready-to-publish",
+  "task": "rustdesk-mobile-actions",
+  "branch": "codex/rustdesk-mobile-actions",
+  "base": "aeb0cda",
+  "head": "cdf9c10",
+  "phase": "implementation-complete",
   "status": "active",
-  "next": "Publish the branch when authorized, confirm the deployed privacy URL, then update the AppGallery user_grant declaration.",
-  "blockers": [],
-  "planPaths": [
-    "docs/codex/plans/2026-08-09-privacy-permission-disclosure-plan.md"
+  "next": "Run cargo test (rustdesk_ffi) and Hvigor default@OhosTestCompileArkTS + assembleHap on the DevEco machine, then real-device Android peer validation; independent review before PR/merge.",
+  "blockers": [
+    "Local environment has no cargo/rustc and no DevEco Studio/hvigorw; build gates and device validation must run on the project's DevEco checkout."
   ],
+  "planPaths": [],
   "review": {
-    "status": "PASS",
-    "taskId": "/root/privacy_disclosure_review",
+    "status": "REVIEW_REQUIRED",
+    "taskId": "",
     "scope": [
-      ".github/workflows/feedback-pages.yml",
-      "docs/app-store/APPGALLERY_RELEASE_GUIDE.md",
-      "docs/app-store/PRIVACY_POLICY.md",
-      "docs/app-store/RELEASE_PRIVACY_CHECKLIST.md",
-      "docs/app-store/USER_GUIDE.md",
-      "docs/feedback/privacy/index.html",
-      "entry/src/main/ets/components/AboutSettingsSheet.ets",
-      "entry/src/main/resources/base/element/string.json"
+      "rustdesk_ffi/src/lib.rs",
+      "rustdesk_ffi/src/connector.rs",
+      "entry/src/main/cpp/extensions/protocol_adapter.h",
+      "entry/src/main/cpp/extensions/extension_loader_napi.cpp",
+      "entry/src/main/cpp/rustdesk/rustdesk_bridge.cpp",
+      "entry/src/main/cpp/rustdesk/rustdesk_bridge.h",
+      "entry/src/main/cpp/rustdesk/rustdesk_ipc.h",
+      "entry/src/main/cpp/types/librdpnapi/index.d.ts",
+      "entry/src/main/ets/types/rdpnapi.d.ts",
+      "entry/src/main/ets/services/ExtensionLoader.ets",
+      "entry/src/main/ets/services/RustDeskMobileActionsPolicy.ets",
+      "entry/src/main/ets/pages/RemoteDesktop.ets",
+      "entry/src/main/ets/components/RemoteSessionTopBar.ets",
+      "entry/src/ohosTest/ets/test/RustDeskMobileActionsPolicy.test.ets",
+      "entry/src/ohosTest/ets/test/List.test.ets",
+      "docs/codex/CURRENT.md",
+      "docs/codex/QUEUE.md",
+      "docs/codex/DECISIONS.md"
     ],
-    "receiptId": "privacy-permission-disclosure-pass-2026-08-09",
-    "reason": "Independent remediation review passed with no P0/P1/P2/P3 findings."
+    "reason": "Implementation complete on codex/rustdesk-mobile-actions; independent review pending before merge."
   },
   "lastVerification": {
-    "baseline": "main@d840e662a clean and equal to origin/main at task start on 2026-08-09",
-    "diffCheck": "PASS on final working tree, 2026-08-09",
-    "testCompile": "PASS: default@OhosTestCompileArkTS exit 0 after review remediation, 2026-08-09",
-    "assembleHap": "PASS: assembleHap exit 0, BUILD SUCCESSFUL in 10 s 206 ms after review remediation, 2026-08-09",
-    "lightCompliance": "PASS: exact verify_open_source_release.ps1 -Mode Light through repository PowerShell resolver, 2026-08-09"
+    "baseline": "main@aeb0cda clean and equal to origin/main at task start",
+    "diffCheck": "PASS: git diff --check exit 0 on final working tree",
+    "cargoTest": "PENDING: no Rust toolchain in this environment",
+    "testCompile": "PENDING: default@OhosTestCompileArkTS requires DevEco",
+    "assembleHap": "PENDING: assembleHap requires DevEco",
+    "lightCompliance": "PENDING"
   },
-  "updated": "2026-08-09 Asia/Shanghai"
+  "updated": "2026-08-11 Asia/Shanghai"
 }
