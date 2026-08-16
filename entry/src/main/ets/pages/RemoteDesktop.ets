@@ -91,6 +91,10 @@ import { RustDeskRelayConfig } from '../model/RustDeskRelayConfig';
 import { rustDeskRelayKeyModeForFfi } from '../services/RustDeskRelayKeyPolicy';
 import { canShowRustDeskMobileActions } from '../services/RustDeskMobileActionsPolicy';
 import {
+  RUSTDESK_MOBILE_ACTIONS,
+  RustDeskMobileAction
+} from '../services/RustDeskMobileActionsPolicy';
+import {
   resolveRustDeskConnectionStrategy,
   rustDeskConnectionStrategyForHost,
   RustDeskConnectionStrategyAvailability,
@@ -6543,7 +6547,7 @@ struct RemoteDesktop {
     }
     // Peer identity polling is independent of the diagnostics dock; restart it
     // even when diagnostics are hidden so the mobile action toolbar refreshes.
-    if (this.connected) {
+    if (!this.isVncSession() && this.connected) {
       this.startRustDeskPeerIdentityPolling();
     }
     if (!this.shouldShowActiveDiagnostics()) {
@@ -15872,6 +15876,28 @@ struct RemoteDesktop {
     .position({ x: '4%', y: '84%' })
   }
 
+  @Builder controlPanelMobileActionRow(start: number, end: number) {
+    Row() {
+      ForEach(RUSTDESK_MOBILE_ACTIONS.slice(start, end), (action: RustDeskMobileAction) => {
+        Column() {
+          Text(action.label).fontSize(13).fontColor('#111111')
+            .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .height(40).layoutWeight(1)
+        .justifyContent(FlexAlign.Center)
+        .borderRadius(10)
+        .backgroundColor(this.pal().card)
+        .border({ width: 1, color: this.pal().cardBorder })
+        .margin({ left: 6, right: 6 })
+        .onClick(() => {
+          this.sendRustDeskMobileKeyTap(action.keyCode, action.label);
+        })
+      }, (action: RustDeskMobileAction): string => action.id)
+    }
+    .width('100%')
+    .margin({ left: 18, right: 18, bottom: 14 })
+  }
+
   @Builder controlPanelBuilder() {
     Column() {
       Text('控制面板')
@@ -15886,6 +15912,16 @@ struct RemoteDesktop {
             .fontSize(12).fontColor(this.pal().text3).layoutWeight(1)
         }
         .width('100%').padding({ left: 24, right: 24, bottom: 14 })
+      }
+      // Android 被控端移动设备操作 — 三指控制面板始终可达 (含手机触摸模式)
+      if (this.rustDeskMobileActionsAvailable()) {
+        Text('移动设备操作')
+          .fontSize(13).fontWeight(FontWeight.Medium)
+          .fontColor(this.pal().text2)
+          .margin({ left: 24, right: 24, bottom: 8 })
+          .alignSelf(ItemAlign.Start)
+        this.controlPanelMobileActionRow(0, 3)
+        this.controlPanelMobileActionRow(3, 6)
       }
       // 键盘按钮
       Row() {
