@@ -48,6 +48,9 @@
   - Rust: `test_client_with_display_state` 缺新字段 (E0063)、panic `{:?}` Debug 风险 → 已修 (e142f0c)。
   - C++: `sendMobileKey` 缺 `override`、peer snapshot 缺 ABI static_assert、IPC payload 8 字节 padding 文档 → 已修 (29f8927)。
   - ArkTS: 版本段非纯数字 (1.2.7-rc1) 漏放行、身份轮询不自动停止、`peerIsAndroid` 命名歧义 → 已修 (0b8cc9f)。
+- **运行时验证 (2026-08-11, 本环境)**: 用 Node 24 原生 TS 类型剥离直接 import 已提交的
+  `RustDeskMobileActionsPolicy.ets` 并执行 ohosTest 同款断言, 37/37 全部通过
+  (平台识别 6、版本门禁 14、能力判定 7、操作目录 10), 退出码 0。
 - 待办 (必须在 DevEco 环境执行):
   1. `cargo test` (rustdesk_ffi, host target) — 2 个新增单元测试。
   2. Hvigor `default@OhosTestCompileArkTS` + `assembleHap` (module=entry, product=default)。
