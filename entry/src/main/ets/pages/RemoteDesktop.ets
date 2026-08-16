@@ -89,8 +89,8 @@ import {
 } from '../services/VncSessionSettingsPolicy';
 import { RustDeskRelayConfig } from '../model/RustDeskRelayConfig';
 import { rustDeskRelayKeyModeForFfi } from '../services/RustDeskRelayKeyPolicy';
-import { canShowRustDeskMobileActions } from '../services/RustDeskMobileActionsPolicy';
 import {
+  canShowRustDeskMobileActions,
   RUSTDESK_MOBILE_ACTIONS,
   RustDeskMobileAction
 } from '../services/RustDeskMobileActionsPolicy';
