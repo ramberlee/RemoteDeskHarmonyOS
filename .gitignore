@@ -18,6 +18,9 @@ Thumbs.db
 *.p7b
 *.jks
 *.keystore
+*.cer
+# DevEco auto-generated signing materials (never publish)
+material/
 *.swp
 *~
 **/__pycache__/

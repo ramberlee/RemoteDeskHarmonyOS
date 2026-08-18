@@ -41,7 +41,10 @@ enum class CodecType {
 enum class MouseButton {
     LEFT   = 0,
     MIDDLE = 1,
-    RIGHT  = 2
+    RIGHT  = 2,
+    // 官方 RustDesk Android 被控端把 BACK 掩码 (64) 映射为
+    // GLOBAL_ACTION_BACK; 移动端客户端的"返回"按钮即发送该鼠标键。
+    BACK   = 3
 };
 
 /** 连接状态 */
@@ -439,6 +442,18 @@ public:
      * @param text  UTF-8 编码文本
      */
     virtual void sendText(const std::string& text) = 0;
+
+    /**
+     * 发送 Android 移动端导航/设备键 (Map-mode 原始 Android key code)。
+     * 仅 RustDesk 适配器在连接 Android 被控端时实现; 其他协议为 no-op。
+     * @param keyCode  Android KeyEvent key code (3=HOME, 4=BACK, 187=APP_SWITCH...)
+     * @param pressed  true=按下, false=释放
+     */
+    virtual void sendMobileKey(uint32_t /*keyCode*/, bool /*pressed*/) {}
+
+    /** 对端平台/版本 (RustDesk PeerInfo); 其他协议返回空。 */
+    virtual std::string peerPlatform() { return ""; }
+    virtual std::string peerVersion() { return ""; }
 
     // ---- 编码能力 ----
 

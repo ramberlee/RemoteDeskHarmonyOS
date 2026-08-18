@@ -944,6 +944,13 @@ pub(crate) enum ControlMsg {
         scancode: u32,
         pressed: bool,
     },
+    /// Android navigation/device key. Sent as a Map-mode raw key code so the
+    /// RustDesk Android controlled side interprets `chr` as an Android
+    /// `KeyEvent` key code (e.g. 3=HOME, 4=BACK, 187=APP_SWITCH).
+    MobileKey {
+        key_code: u32,
+        pressed: bool,
+    },
     MouseEvent {
         x: i32,
         y: i32,
@@ -1036,6 +1043,41 @@ struct RustDeskClient {
     remote_clipboard: Arc<Mutex<Vec<u8>>>,
     stream_stats: Arc<Mutex<RustDeskStreamStats>>,
     display_state: Arc<Mutex<RustDeskDisplayState>>,
+    peer_snapshot: Arc<Mutex<RustDeskPeerSnapshot>>,
+}
+
+/// Minimal peer identity published out of the streaming thread. Fixed-size
+/// buffers keep the FFI boundary trivially copyable.
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct RustDeskPeerSnapshot {
+    /// 1 once the peer LoginResponse/PeerInfo has been observed, else 0.
+    pub available: u8,
+    /// Byte length of `platform` (0 when unavailable).
+    pub platform_len: u8,
+    pub platform: [u8; 32],
+    /// Byte length of `version` (0 when unavailable).
+    pub version_len: u8,
+    pub version: [u8; 32],
+}
+
+impl RustDeskPeerSnapshot {
+    /// Replace the snapshot with the peer's platform and version. Values are
+    /// truncated at the fixed buffer size; an empty string keeps `available`.
+    pub(crate) fn publish(&mut self, platform: &str, version: &str) {
+        self.available = 1;
+        self.platform = [0u8; 32];
+        self.platform_len = write_snapshot_field(platform, &mut self.platform);
+        self.version = [0u8; 32];
+        self.version_len = write_snapshot_field(version, &mut self.version);
+    }
+}
+
+fn write_snapshot_field(text: &str, out: &mut [u8; 32]) -> u8 {
+    let bytes = text.as_bytes();
+    let len = bytes.len().min(31);
+    out[..len].copy_from_slice(&bytes[..len]);
+    len as u8
 }
 
 #[repr(C)]
@@ -1707,6 +1749,16 @@ fn rustdesk_connect_impl(
             }));
             let transfer_status = Arc::new(Mutex::new(RustDeskTransferStatus::default()));
             let transfer_error = Arc::new(Mutex::new(String::new()));
+            let peer_snapshot = Arc::new(Mutex::new(RustDeskPeerSnapshot::default()));
+            {
+                // Seed the snapshot with the identity from LoginResponse; the
+                // streaming thread refreshes it on every PeerInfo update.
+                let (platform, version) = c.peer_identity();
+                if let Ok(mut snapshot) = peer_snapshot.lock() {
+                    snapshot.publish(&platform, &version);
+                }
+            }
+            let stream_peer_snapshot = Arc::clone(&peer_snapshot);
             let stream_stats_for_thread = Arc::clone(&stream_stats);
             let stream_display_state = Arc::clone(&display_state);
             let frame_display_state = Arc::clone(&display_state);
@@ -1737,6 +1789,7 @@ fn rustdesk_connect_impl(
                     stream_controls,
                     stream_stats_for_thread,
                     stream_display_state,
+                    stream_peer_snapshot,
                     |frame| {
                         dispatch_video_frame(
                             frame,
@@ -1831,6 +1884,7 @@ fn rustdesk_connect_impl(
                 remote_clipboard,
                 stream_stats,
                 display_state,
+                peer_snapshot,
             });
 
             Box::into_raw(ctx) as *mut c_void
@@ -2483,6 +2537,47 @@ pub extern "C" fn rustdesk_send_key(handle: *mut c_void, scancode: u32, pressed:
     ));
 }
 
+/// 发送 Android 移动端导航/设备键 (Map-mode 原始 Android key code)
+///
+/// 与官方 RustDesk 移动端客户端的 Back/Home/Apps/Volume/Power 操作一致:
+/// 3=HOME, 4=BACK, 187=APP_SWITCH(最近任务), 24/25=音量, 26=电源.
+#[no_mangle]
+pub extern "C" fn rustdesk_send_mobile_key(
+    handle: *mut c_void,
+    key_code: u32,
+    pressed: bool,
+) {
+    if handle.is_null() {
+        return;
+    }
+    let ctx = unsafe { &*(handle as *const RustDeskClient) };
+    ctx.controls
+        .enqueue(ControlMsg::MobileKey { key_code, pressed });
+    set_last_error(format!(
+        "rustdesk_send_mobile_key enqueue key_code={} pressed={}",
+        key_code, pressed
+    ));
+}
+
+/// 读取对端平台/版本快照 (用于移动端远程移动端的交互能力判断)
+#[no_mangle]
+pub extern "C" fn rustdesk_get_peer_snapshot(
+    handle: *mut c_void,
+    out: *mut RustDeskPeerSnapshot,
+) -> bool {
+    if handle.is_null() || out.is_null() {
+        return false;
+    }
+    let ctx = unsafe { &*(handle as *const RustDeskClient) };
+    let Ok(snapshot) = ctx.peer_snapshot.lock() else {
+        return false;
+    };
+    unsafe {
+        std::ptr::write(out, *snapshot);
+    }
+    true
+}
+
 /// 发送鼠标事件
 #[no_mangle]
 pub extern "C" fn rustdesk_send_mouse(
@@ -2839,6 +2934,7 @@ mod tests {
             remote_clipboard: Arc::new(Mutex::new(Vec::new())),
             stream_stats: Arc::new(Mutex::new(RustDeskStreamStats::default())),
             display_state: Arc::new(Mutex::new(display_state)),
+            peer_snapshot: Arc::new(Mutex::new(RustDeskPeerSnapshot::default())),
         }
     }
 

@@ -2,61 +2,107 @@
 
 ## Active Task
 
-- Task: `privacy-permission-disclosure`
-- Base: `main@d840e662a`
-- Branch: `codex/privacy-permission-disclosure`
-- Phase: locally complete, independently reviewed and ready to publish.
+- Task: `rustdesk-mobile-actions` — 移动端客户端远程移动端交互 (复刻 RustDesk 官方移动端操作)
+- Base: `main@aeb0cda` (origin/main, clean before task)
+- Branch: `codex/rustdesk-mobile-actions` (已推送 origin)
+- **PR #1: https://github.com/ramberlee/RemoteDeskHarmonyOS/pull/1 (open)**
+- Phase: 实现 + 三层独立静态 review + cargo 全量验证 + C++ 编译验证 +
+  **Hvigor 双门禁通过 (2026-08-16)** + 已推送 PR; 真机验证待 HarmonyOS 设备/Android 被控端。
 
 ## Context
 
-- AppGallery reported that the package declares the `user_grant` permission
-  `ohos.permission.DISTRIBUTED_DATASYNC`, while the submitted privacy policy does
-  not declare it explicitly.
-- The signed 1.1.0 App package was verified successfully and must retain this
-  permission for Huawei Cloud Space synchronization.
-- The canonical, public and in-app policies now explicitly disclose the exact
-  permission, trigger, purpose and refusal impact.
-- The in-app complete-policy link now targets the dedicated `/privacy/` page,
-  which the existing GitHub Pages workflow packages alongside the feedback page.
-- Runtime permission declarations, cloud synchronization code and signing
-  material were not changed.
-- The first independent review found overbroad claims about encryption and
-  device-local personalization. The policy now states the actual conditional
-  encryption behavior and the old-version cloud compatibility snapshots.
-- Refusal/withdrawal impact is now identical in the public policy, in-app
-  summary and AppGallery submission wording; stale VNC mock wording was removed.
-- Independent remediation review of `0026e4252`: PASS with no P0/P1/P2/P3
-  findings; receipt `privacy-permission-disclosure-pass-2026-08-09`.
+- 本机 (HarmonyOS 客户端) 远程控制 Android 被控端时，之前只能发送桌面键盘码，
+  不能发送 Android 导航键 (返回/主页/最近任务)。目标: 至少复刻 RustDesk 官方
+  移动端客户端的 Back/Home/Apps/Volume/Power 操作。
+- 线格式依据官方实现核实:
+  - Android 被控端 `KeyEventConverter` (flutter/android/.../KeyboardKeyEventMapper.kt)
+    在 `KeyboardMode::Map/Translate` 下把 `KeyEvent.chr` 当作 Android KeyEvent
+    key code 注入; `control_key` 仅覆盖 VolumeMute/VolumeUp/VolumeDown/Power 等。
+  - 官方移动端 `_getMobileActionMenus` 仅对 `pi.platform == "Android"` 且
+    被控端版本 >= 1.2.7 显示 Back/Home/Apps/Volume/Power。
+- 因此 FFI 新增 `rustdesk_send_mobile_key(handle, key_code, pressed)`，以
+  Map-mode `chr` 发送 Android key code (3=HOME, 4=BACK, 187=APP_SWITCH,
+  24/25=音量, 26=电源)，复用现有 `build_map_key_message`。
+- FFI 新增 `rustdesk_get_peer_snapshot(handle, out)` 暴露对端
+  platform/version (由 streaming 线程在 LoginResponse/PeerInfo 到达时发布)。
+- NAPI 新增 `sendRustDeskMobileKey` / `getRustDeskPeerPlatform` /
+  `getRustDeskPeerVersion`; ArkTS 侧新增 `RustDeskMobileActionsPolicy`、
+  RemoteDesktop 对端身份轮询、RemoteSessionTopBar "移动设备操作" 区
+  (2×3 网格: 返回/主页/最近任务/音量+/音量-/电源)。
+- 可达性覆盖: Pad/PC 及手机键鼠模式经顶栏控制菜单; 手机触摸/触控板模式
+  顶栏隐藏, 移动设备操作同时接入三指控制面板 (始终可达)。
 
 ## Scope
 
-- Canonical and public privacy policy wording.
-- In-app privacy summary and complete-policy URL.
-- Existing GitHub Pages packaging workflow.
-- AppGallery permission checklist and release guide terminology.
+- rustdesk_ffi (lib.rs / connector.rs): ControlMsg::MobileKey、peer snapshot、
+  线格式与测试。
+- rustdesk_bridge.cpp/h、rustdesk_ipc.h (IPC 帧 0x14)、protocol_adapter.h
+  (默认 no-op 虚函数)、extension_loader_napi.cpp (3 个 NAPI + 导出)。
+- rdpnapi.d.ts / librdpnapi index.d.ts / ExtensionLoader.ets 声明与封装。
+- RemoteDesktop.ets (对端身份轮询 + 顶栏接线)、RemoteSessionTopBar.ets
+  (移动设备操作区)、RustDeskMobileActionsPolicy.ets (策略)。
 
 ## Verification
 
-- Baseline: clean `main@d840e662a`, equal to `origin/main` on 2026-08-09.
-- Post-review-remediation `default@OhosTestCompileArkTS`: PASS, exit 0 on
-  2026-08-09.
-- Post-review-remediation `assembleHap`: PASS, exit 0,
-  `BUILD SUCCESSFUL in 10 s 206 ms`.
-- JSON, workflow YAML, Pages artifact simulation, literal permission and Huawei
-  Cloud Space terminology checks: PASS.
-- `git diff --check`: PASS.
-- Manual shell equivalent of the Light compliance checks, including required
-  tracked artifacts, protocol hashes, SPDX metadata and secret patterns: PASS.
-- Exact `verify_open_source_release.ps1 -Mode Light`: PASS through the
-  repository-provided PowerShell resolver.
+- **Hvigor 门禁 (本机, 2026-08-16, DevEco Studio + HarmonyOS 6.1.1(24) SDK @ D:\Program Files\Huawei\DevEco Studio\sdk)**:
+  - `default@OhosTestCompileArkTS` (module=entry, product=default): **BUILD SUCCESSFUL in 1 min 46 s, exit 0** (仅既有 deprecation 警告)。
+  - `assembleHap` (module=entry, product=default): **BUILD SUCCESSFUL in 3 min 37 s, exit 0**;
+    产物 `entry/build/default/outputs/default/entry-default-unsigned.hap` (60.6MB,
+    未签名, "No signingConfig" 警告为预期)。
+  - native 链路: SDK clang 15 直接交叉编译 opus 1.5.2 (arm64-v8a+x86_64, 无 autotools,
+    `scripts/build_opus_ohos.sh`); rustup target aarch64/x86_64-unknown-linux-ohos +
+    cargo --release 交叉编译 rustdesk_ffi (CC/AR/linker=SDK clang/llvm-ar, sysroot 经
+    `D:\ohos-sdk` junction 规避路径空格, CFLAGS 用正斜杠避免 shlex 转义);
+    freerdp 源码头 (Mydstiny freerdp-ohos 分支 dae8276, 与 gitlink 一致) +
+    libs/freerdp-ohos 预编译; ffmpeg-ohos/openssl/libssh2 预编译就位。
+  - 本地未提交文件: local.properties (sdk.dir)、build-profile.json5 (无签名配置)、
+    D:\ohos-sdk junction、.npmrc 代理、.hvigor 包装缓存; ohpm 依赖 (hypium 1.0.24、
+    agconnect/auth 1.0.5) 已装; libs/opus-ohos 与 build/ 均为 gitignore 产物。
+- **cargo test + cargo build (本机, 2026-08-11)**: 自建 Rust 工具链 (rustup 1.97.1
+  x86_64-pc-windows-gnu) + w64devkit (GCC 16.2/ld 2.47) + 自编译 libopus.a
+  (opus 1.5.2, cmake/ninja via pip, 网络经代理 127.0.0.1:7897)。
+  - `cargo test` 默认 features: **194 passed; 0 failed; exit 0** (含新增
+    `connector::tests::mobile_key_uses_map_mode_with_android_keycode` 与
+    `connector::tests::peer_snapshot_publishes_platform_and_version_within_fixed_buffers`)。
+  - `cargo test --no-default-features`: 184 passed; 0 failed。
+  - `cargo build` (cdylib+staticlib, RUSTFLAGS=-L w64devkit gcc lib): exit 0,
+    rustdesk_ffi.dll 生成。
+  - `cargo build --release` (LTO=true, opt-level=2, strip): **exit 0**,
+    release dll 3.7MB (2026-08-11)。
+  - `cargo test --release`: **194 passed / 0 failed / exit 0** (2026-08-11)。
+  - 注意: 管道截断输出时 cargo 可能误报 exit 1; 以文件重定向的退出码为准。
+  - 注: cdylib 链接需 `RUSTFLAGS=-L <w64devkit gcc lib dir>` 定位 libopus.a;
+    cargo test 经 gcc driver 自动找到。
+- **C++ 编译级验证 (本机, 2026-08-11)**: 用 w64devkit gcc (GCC 16.2) 对本次改动的
+  C++ 头文件/实现做 `-fsyntax-only -std=c++17` 真实语法编译 (OHOS 专用头
+  hilog/socket 以最小 stub 替代):
+  - `rustdesk_ipc.h` (新枚举 0x14 + RdIpcMobileKeyEvent): exit 0。
+  - `protocol_adapter.h` (3 个新默认虚函数): exit 0 (含完整依赖头链)。
+  - `rustdesk_bridge.h` (RustDeskPeerIdentity + 4 个新方法声明): exit 0。
+  - `rustdesk_bridge.cpp` (sendMobileKey/peerPlatform/peerVersion/peerIdentity
+    实现 + extern "C" 声明 + ABI static_assert): exit 0 — static_assert 在
+    语法检查时真实求值, sizeof(RustDeskFfiPeerSnapshot)==67 与 5 个 offsetof
+    断言全部通过; `override` 签名匹配经基类虚函数校验。
+  - 注: extension_loader_napi.cpp 依赖 60+ 个 N-API 符号, stub 成本过高;
+    其新增代码与既有 NapiSendKey 模式逐字一致且经静态 review。
+- 三路独立静态 review (Rust FFI、C++/NAPI、ArkTS) 全部完成, 无未解决发现:
+  - Rust: `test_client_with_display_state` 缺新字段 (E0063)、panic `{:?}` Debug 风险 → 已修 (e142f0c)。
+  - C++: `sendMobileKey` 缺 `override`、peer snapshot 缺 ABI static_assert、IPC payload 8 字节 padding 文档 → 已修 (29f8927)。
+  - ArkTS: 版本段非纯数字 (1.2.7-rc1) 漏放行、身份轮询不自动停止、`peerIsAndroid` 命名歧义 → 已修 (0b8cc9f)。
+- **运行时验证 (2026-08-11, 本环境)**: 用 Node 24 原生 TS 类型剥离直接 import 已提交的
+  `RustDeskMobileActionsPolicy.ets` 并执行 ohosTest 同款断言, 37/37 全部通过
+  (平台识别 6、版本门禁 14、能力判定 7、操作目录 10), 退出码 0。
+- 待办 (真机验证): HarmonyOS 设备安装 `entry-default-unsigned.hap` (未签名, 需
+  先签名或设备允许调试安装), 连接 Android RustDesk 被控端 (>=1.2.7) 验证
+  返回/主页/最近任务/音量/电源 生效; 非 Android 对端不显示。
 
 ## Next
 
-1. Publish the branch and deploy Pages when authorized.
-2. Confirm the public privacy URL, then use it and the exact
-   permission-purpose wording in AppGallery.
+1. 真机验证 (HarmonyOS 设备 + Android 被控端)。
+2. 确认 open-source-compliance (仓库 Actions 未启用, 人工跑 Light 或启用 Actions)。
+3. 全部通过后 merge PR #1 → 同步 main → 删除已合并分支。
 
 ## Blockers
 
-- None for local implementation. The public page and AppGallery declaration do
-  not change until the branch is published and the AppGallery form is updated.
+- 真机验证需 HarmonyOS 设备 (安装 HAP) + Android RustDesk 被控端 (≥1.2.7),
+  以及签名配置 (华为账号 debug 证书)。

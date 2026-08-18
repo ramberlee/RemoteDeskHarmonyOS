@@ -148,3 +148,16 @@ changes produce `REVIEW_REQUIRED`; a missing report produces `RESUME_REVIEW` and
 must reuse the recorded reviewer task rather than dispatching a duplicate after
 context compression. Review status is separate from build, device, endpoint,
 cloud, and release readiness.
+
+## D-025 - RustDesk Android mobile keys travel as Map-mode `chr` key codes
+
+RustDesk's Android controlled side (`KeyEventConverter` in the Flutter Android
+app) interprets `KeyEvent.chr` as a raw Android `KeyEvent` key code when the
+message mode is `Map`/`Translate`; `control_key` covers only a subset
+(VolumeMute/VolumeUp/VolumeDown/Power). The official mobile client therefore
+sends Back/Home/Apps as key codes 4/3/187 (and volume/power as 24/25/26) in
+Map mode, gated on `platform == "Android"` and peer version >= 1.2.7. This
+project's FFI keeps that contract: `rustdesk_send_mobile_key` emits a Map-mode
+`chr` KeyEvent and never reuses the desktop keyboard transport. Do not encode
+Android navigation keys as `ControlKey` or Legacy `chr` characters, and do not
+show the mobile action toolbar for non-Android peers.

@@ -91,6 +91,13 @@ struct RustDeskDisplaySwitchRequest {
     uint64_t generation = 0;
 };
 
+/** Peer identity observed from the RustDesk LoginResponse/PeerInfo. */
+struct RustDeskPeerIdentity {
+    bool available = false;
+    std::string platform;
+    std::string version;
+};
+
 using RustDeskDisplayStateCallback = std::function<void(int display)>;
 
 // C 兼容连接配置 (与 rustdesk_ffi/src/lib.rs 中的 RustDeskConfig 内存布局一致)
@@ -185,6 +192,14 @@ public:
     void sendMouseWheel(int x, int y, int delta) override;
     bool sendTouchpadWheel(int x, int y);
     void sendText(const std::string& text) override;
+    /** Android navigation/device key sent as a Map-mode raw Android key code. */
+    void sendMobileKey(uint32_t keyCode, bool pressed) override;
+    /** Peer platform observed from LoginResponse/PeerInfo; empty when unknown. */
+    std::string peerPlatform() override;
+    /** Peer version observed from LoginResponse/PeerInfo; empty when unknown. */
+    std::string peerVersion() override;
+    /** Combined peer identity (platform + version) in one FFI snapshot read. */
+    RustDeskPeerIdentity peerIdentity() const;
     void setDisplayStateCallback(RustDeskDisplayStateCallback callback);
     RustDeskDisplayCapabilities getDisplayCapabilities() const;
     RustDeskDisplaySwitchRequest beginDisplaySwitch(int display);

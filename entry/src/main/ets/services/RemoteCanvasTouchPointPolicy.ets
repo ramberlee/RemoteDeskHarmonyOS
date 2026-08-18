@@ -31,3 +31,16 @@ export function resolveCanvasActiveTouchCount(event: CanvasTouchPointEvent,
   }
   return reported > 0 ? reported : previous;
 }
+
+/**
+ * Whether a centroid displacement beyond the click slop counts as gesture
+ * movement. While every finger of an active three-finger gesture is still
+ * down, movement is genuine. When fingers lift one by one, the centroid of
+ * the remaining contacts can jump by far more than the slop even though the
+ * user never moved — marking that as movement would swallow a clean
+ * three-finger tap (the local control-panel toggle). Two-finger and
+ * single-finger gestures keep the legacy behavior (always count movement).
+ */
+export function shouldMarkTouchMoved(touchMaxFingers: number, touchFingerCount: number): boolean {
+  return touchMaxFingers < 3 || touchFingerCount >= 3;
+}

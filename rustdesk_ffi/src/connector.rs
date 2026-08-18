@@ -1172,6 +1172,7 @@ impl RustDeskConnector {
         controls: Arc<ControlInbox>,
         stream_stats: Arc<Mutex<crate::RustDeskStreamStats>>,
         display_state: Arc<Mutex<crate::RustDeskDisplayState>>,
+        peer_snapshot: Arc<Mutex<crate::RustDeskPeerSnapshot>>,
         mut on_video: VF,
         mut on_audio_format: AFF,
         mut on_audio: AF,
@@ -1726,6 +1727,7 @@ impl RustDeskConnector {
                     last_msg_kind = "peer_info";
                     *msg_stats.entry("peer_info").or_default() += 1;
                     self.session.update_peer_info(info.clone());
+                    Self::publish_peer_snapshot(&peer_snapshot, info);
                     Self::apply_peer_info_geometry(&display_state, info, &stream_stats);
                     on_display_state();
                 }
@@ -2107,6 +2109,9 @@ impl RustDeskConnector {
                     remote_keyboard_transport,
                 )
             }
+            crate::ControlMsg::MobileKey { key_code, pressed } => {
+                Self::send_mobile_key_encrypted(crypto, key_code, pressed)
+            }
             crate::ControlMsg::MouseEvent {
                 x,
                 y,
@@ -2117,6 +2122,10 @@ impl RustDeskConnector {
                     0 => 0x01,
                     1 => 0x04,
                     2 => 0x02,
+                    // MouseButton::BACK: 官方 Android 被控端 InputService 在
+                    // BACK_UP 掩码 ((0x08 << 3) | 2 == 66) 时执行
+                    // GLOBAL_ACTION_BACK (移动端客户端"返回"按钮同款通道)。
+                    3 => 0x08,
                     _ => 0x01,
                 };
                 let messages = Self::build_mouse_button_messages(
@@ -2185,6 +2194,7 @@ impl RustDeskConnector {
             crate::ControlMsg::RefreshVideoDisplay { .. } => "refresh_video_display",
             crate::ControlMsg::VideoPressure { .. } => "video_pressure",
             crate::ControlMsg::KeyEvent { .. } => "key",
+            crate::ControlMsg::MobileKey { .. } => "mobile_key",
             crate::ControlMsg::MouseEvent { .. } => "mouse",
             crate::ControlMsg::MouseMove { .. } => "mouse_move",
             crate::ControlMsg::MouseWheel { .. } => "mouse_wheel",
@@ -2198,6 +2208,15 @@ impl RustDeskConnector {
             crate::ControlMsg::TouchPanUpdate { .. } => "touch_pan_update",
             crate::ControlMsg::TouchPanEnd { .. } => "touch_pan_end",
         }
+    }
+
+    /// Best-effort peer platform/version available before streaming starts
+    /// (from the LoginResponse). Returns an empty pair when not yet known.
+    pub fn peer_identity(&self) -> (String, String) {
+        self.session
+            .peer_info()
+            .map(|info| (info.get_platform().to_string(), info.get_version().to_string()))
+            .unwrap_or_default()
     }
 
     fn default_remote_upload_dir(&self) -> Option<String> {
@@ -2995,6 +3014,29 @@ impl RustDeskConnector {
         Self::send_message_encrypted(crypto, &msg)
     }
 
+    /// Send an Android navigation/device key as a Map-mode raw key code.
+    ///
+    /// RustDesk's Android controlled side (`KeyEventConverter`) interprets
+    /// `chr` in Map/Translate mode as an Android `KeyEvent` key code, so the
+    /// values are platform key codes: 3=HOME, 4=BACK, 187=APP_SWITCH (recent),
+    /// 24/25=volume, 26=power. This matches the official mobile client's
+    /// Back/Home/Apps/Volume/Power actions and does not depend on the peer's
+    /// desktop keyboard transport.
+    fn send_mobile_key_encrypted(
+        crypto: &mut CryptoChannel,
+        key_code: u32,
+        pressed: bool,
+    ) -> io::Result<()> {
+        let msg = Self::build_map_key_message(key_code, pressed);
+        let status = format!(
+            "send android mobile key key_code={} pressed={} mode=map",
+            key_code, pressed,
+        );
+        crate::set_last_error(status.clone());
+        eprintln!("[RustDesk-FFI] {}", status);
+        Self::send_message_encrypted(crypto, &msg)
+    }
+
     fn harmony_keycode_to_control_key(scancode: u32) -> Option<ControlKey> {
         match scancode {
             42 | 2055 => Some(ControlKey::Backspace),
@@ -3472,6 +3514,17 @@ impl RustDeskConnector {
             state.height,
             state.geometry_epoch
         );
+    }
+
+    /// Publish the peer's platform/version so the FFI layer can expose it to
+    /// the client UI (e.g. to offer Android mobile actions for Android peers).
+    fn publish_peer_snapshot(
+        snapshot: &Arc<Mutex<crate::RustDeskPeerSnapshot>>,
+        info: &PeerInfo,
+    ) {
+        if let Ok(mut guard) = snapshot.lock() {
+            guard.publish(info.get_platform(), info.get_version());
+        }
     }
 
     pub fn peer_display_state(&self) -> crate::RustDeskDisplayState {
@@ -4331,6 +4384,27 @@ mod tests {
     }
 
     #[test]
+    fn mouse_back_button_uses_official_android_back_mask() {
+        // 官方 Android 被控端 InputService 常量: BACK = 64, DOWN = 1, UP = 2;
+        // BACK_UP == 66 时执行 GLOBAL_ACTION_BACK。button 3 (MouseButton::BACK)
+        // 的掩码基值为 0x08, 左移 3 位后与 DOWN/UP 组合。
+        let modifiers = PhysicalModifierState::default();
+        let down = RustDeskConnector::build_mouse_button_messages(0, 0, 0x08, true, &modifiers);
+        let down_button = match &down[1].union {
+            Some(Message_oneof_union::mouse_event(mouse)) => mouse,
+            _ => panic!("mouse back down must end with a button event"),
+        };
+        assert_eq!(down_button.mask, (0x08 << 3) | 1);
+
+        let up = RustDeskConnector::build_mouse_button_messages(0, 0, 0x08, false, &modifiers);
+        let up_button = match &up[0].union {
+            Some(Message_oneof_union::mouse_event(mouse)) => mouse,
+            _ => panic!("mouse back up must contain only a button event"),
+        };
+        assert_eq!(up_button.mask, (0x08 << 3) | 2);
+    }
+
+    #[test]
     fn legacy_letter_keycodes_use_lowercase_layout_characters() {
         assert_eq!(RustDeskConnector::harmony_keycode_to_chr(2017), b'a' as u32);
         assert_eq!(RustDeskConnector::harmony_keycode_to_chr(2019), b'c' as u32);
@@ -4683,5 +4757,53 @@ mod tests {
             )
             .expect("direct file transfer should use the peer login protocol");
         accept_thread.join().expect("accept thread panicked");
+    }
+
+    #[test]
+    fn mobile_key_uses_map_mode_with_android_keycode() {
+        // The Android controlled side interprets `chr` in Map mode as an
+        // Android KeyEvent key code. This mirrors the official mobile client's
+        // Back/Home/Apps/Volume/Power actions.
+        for (key_code, pressed) in [(4u32, true), (3u32, true), (187u32, false)] {
+            let message = RustDeskConnector::build_map_key_message(key_code, pressed);
+            match message.union {
+                Some(Message_oneof_union::key_event(key_event)) => {
+                    assert_eq!(
+                        key_event.get_mode(),
+                        KeyboardMode::Map,
+                        "mobile key must use Map mode so Android treats chr as a key code"
+                    );
+                    assert_eq!(key_event.get_chr(), key_code);
+                    assert_eq!(key_event.get_down(), pressed);
+                    assert!(!key_event.has_control_key());
+                }
+                _ => panic!("mobile key must produce a KeyEvent message"),
+            }
+        }
+    }
+
+    #[test]
+    fn peer_snapshot_publishes_platform_and_version_within_fixed_buffers() {
+        let mut snapshot = crate::RustDeskPeerSnapshot::default();
+        assert_eq!(snapshot.available, 0);
+
+        snapshot.publish("Android", "1.2.7");
+        assert_eq!(snapshot.available, 1);
+        assert_eq!(snapshot.platform_len, 7);
+        assert_eq!(&snapshot.platform[..7], &b"Android"[..]);
+        assert_eq!(snapshot.version_len, 5);
+        assert_eq!(&snapshot.version[..5], &b"1.2.7"[..]);
+
+        // A second publish replaces the previous identity.
+        snapshot.publish("Windows", "1.3.2");
+        assert_eq!(snapshot.platform_len, 7);
+        assert_eq!(&snapshot.platform[..7], &b"Windows"[..]);
+
+        // Over-long values are truncated, never panic.
+        snapshot.publish(&"x".repeat(80), &"y".repeat(80));
+        assert_eq!(snapshot.platform_len, 31);
+        assert_eq!(snapshot.version_len, 31);
+        assert_eq!(&snapshot.platform[..31], &[b'x'; 31][..]);
+        assert_eq!(&snapshot.version[..31], &[b'y'; 31][..]);
     }
 }

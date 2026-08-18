@@ -90,6 +90,13 @@ import {
 import { RustDeskRelayConfig } from '../model/RustDeskRelayConfig';
 import { rustDeskRelayKeyModeForFfi } from '../services/RustDeskRelayKeyPolicy';
 import {
+  canShowRustDeskMobileActions,
+  RUSTDESK_MOBILE_ACTIONS,
+  RustDeskMobileAction,
+  RustDeskMobileActionPlan,
+  rustDeskMobileActionPlan
+} from '../services/RustDeskMobileActionsPolicy';
+import {
   resolveRustDeskConnectionStrategy,
   rustDeskConnectionStrategyForHost,
   RustDeskConnectionStrategyAvailability,
@@ -293,7 +300,8 @@ import {
 } from '../services/RemoteCanvasGesturePolicy';
 import {
   CanvasTouchPointEvent,
-  resolveCanvasActiveTouchCount
+  resolveCanvasActiveTouchCount,
+  shouldMarkTouchMoved
 } from '../services/RemoteCanvasTouchPointPolicy';
 import {
   baseCanvasTransform,
@@ -333,6 +341,8 @@ import {
 import { RemoteProtocol } from '../services/RemoteSessionState';
 import {
   canUseRustDeskAdaptiveOrientation,
+  isRustDeskMobilePlatform,
+  normalizeRustDeskTargetDevice,
   rustDeskOrientationPolicy
 } from '../services/RemoteOrientationPolicy';
 import {
@@ -789,6 +799,10 @@ struct RemoteDesktop {
   @State rustDeskDisplayPendingResolution: RustDeskDisplayResolution = EMPTY_RUSTDESK_DISPLAY_RESOLUTION;
   @State showRustDeskDisplayResolutionMenu: boolean = false;
   @State localResourceStats: LocalResourceStats = EMPTY_LOCAL_RESOURCE_STATS;
+  // RustDesk PeerInfo 对端身份 (移动端远程移动端操作能力判断)
+  @State rustDeskPeerPlatform: string = '';
+  @State rustDeskPeerVersion: string = '';
+  private rustDeskPeerIdentityTimer: number = -1;
   @State rustDeskAuthChoice: RustDeskAuthChoice = 'password';
   @State rustDeskAuthPasswordInput: string = '';
   @State rustDeskAuthPasswordMode: number = 0;
@@ -5153,6 +5167,9 @@ struct RemoteDesktop {
       onSetTouchpadSpeed: (speed: number): void => {
         this.setRustDeskTouchpadSpeed(speed);
       },
+      onSendMobileKey: (actionId: string, label: string): void => {
+        this.sendRustDeskMobileActionTap(actionId, label);
+      },
       onUnsupported: (actionId: string, reason: string): void => {
         this.toastUnsupportedRustDeskAction(actionId, reason);
       }
@@ -6533,6 +6550,11 @@ struct RemoteDesktop {
       this.startRdpTransferStatusPolling(this.sessionId, this.connectAttemptId);
       return;
     }
+    // Peer identity polling is independent of the diagnostics dock; restart it
+    // even when diagnostics are hidden so the mobile action toolbar refreshes.
+    if (!this.isVncSession() && this.connected) {
+      this.startRustDeskPeerIdentityPolling();
+    }
     if (!this.shouldShowActiveDiagnostics()) {
       return;
     }
@@ -6598,6 +6620,121 @@ struct RemoteDesktop {
     }
   }
 
+  // ============================================================
+  // RustDesk 对端身份轮询 (移动端远程移动端操作能力)
+  // ============================================================
+
+  private refreshRustDeskPeerIdentity(): void {
+    if (this.sessionId <= 0 || !this.connected) {
+      return;
+    }
+    const platform: string = this.loader.getRustDeskPeerPlatform(this.sessionId);
+    const version: string = this.loader.getRustDeskPeerVersion(this.sessionId);
+    if (this.rustDeskPeerPlatform !== platform || this.rustDeskPeerVersion !== version) {
+      const platformJustLearned: boolean = this.rustDeskPeerPlatform.trim() === '' &&
+        platform.trim() !== '';
+      this.rustDeskPeerPlatform = platform;
+      this.rustDeskPeerVersion = version;
+      hilog.info(RD_DOMAIN, RD_TAG,
+        'rustdesk-peer-identity platform=' + platform + ' version=' + version);
+      if (platformJustLearned) {
+        // 实际对端平台已确认 (如 Android 手机): 重新应用方向策略,
+        // 即使主机配置的目标设备是 computer 也按真实平台显示。
+        this.applyRustDeskOrientationPolicy('peer-identity').catch((err: Error): void => {
+          hilog.warn(RD_DOMAIN, RD_TAG,
+            'rustdesk-orientation reapply failed: ' + JSON.stringify(err));
+        });
+      }
+    }
+    // Peer identity is fixed once PeerInfo arrives; stop the poll so it does
+    // not keep crossing the NAPI boundary for the whole session.
+    if (platform !== '') {
+      this.stopRustDeskPeerIdentityPolling();
+    }
+  }
+
+  private startRustDeskPeerIdentityPolling(): void {
+    if (this.rustDeskPeerIdentityTimer >= 0 || this.sessionId <= 0) {
+      return;
+    }
+    this.refreshRustDeskPeerIdentity();
+    this.rustDeskPeerIdentityTimer = setInterval((): void => {
+      if (this.sessionId <= 0 || !this.connected) {
+        this.stopRustDeskPeerIdentityPolling();
+        return;
+      }
+      this.refreshRustDeskPeerIdentity();
+    }, 1000);
+  }
+
+  private stopRustDeskPeerIdentityPolling(): void {
+    if (this.rustDeskPeerIdentityTimer >= 0) {
+      clearInterval(this.rustDeskPeerIdentityTimer);
+      this.rustDeskPeerIdentityTimer = -1;
+    }
+    if (!this.connected) {
+      this.rustDeskPeerPlatform = '';
+      this.rustDeskPeerVersion = '';
+    }
+  }
+
+  /** 对端是 Android 且版本满足官方移动端操作门禁 */
+  private rustDeskMobileActionsAvailable(): boolean {
+    return canShowRustDeskMobileActions(this.rustDeskPeerPlatform, this.rustDeskPeerVersion);
+  }
+
+  /**
+   * 发送 Android 移动端操作。与官方 input_model.dart 的 onMobile* 一致:
+   * 返回 = 鼠标 BACK 键 (>= 1.3.8; 更旧对端右键), 主页 = 中键单击,
+   * 最近任务 = 中键按住, 音量/电源 = Map 模式 Android key code。
+   */
+  private sendRustDeskMobileActionTap(actionId: string, label: string): void {
+    if (this.sessionId <= 0) {
+      return;
+    }
+    const action: RustDeskMobileAction | undefined =
+      RUSTDESK_MOBILE_ACTIONS.find((candidate: RustDeskMobileAction): boolean =>
+        candidate.id === actionId);
+    if (!action) {
+      hilog.warn(RD_DOMAIN, RD_TAG, 'rustdesk-mobile-action unknown id=' + actionId);
+      return;
+    }
+    const plan: RustDeskMobileActionPlan =
+      rustDeskMobileActionPlan(action, this.rustDeskPeerVersion);
+    try {
+      if (plan.kind === 'key-tap') {
+        this.loader.sendRustDeskMobileKey(this.sessionId, plan.keyCode, true);
+        this.loader.sendRustDeskMobileKey(this.sessionId, plan.keyCode, false);
+        hilog.info(RD_DOMAIN, RD_TAG,
+          'rustdesk-mobile-key tap=' + label + ' code=' + plan.keyCode.toString());
+      } else if (plan.kind === 'mouse-button-tap') {
+        this.sendRustDeskMobileMouseButton(plan.button, true);
+        this.sendRustDeskMobileMouseButton(plan.button, false);
+        hilog.info(RD_DOMAIN, RD_TAG,
+          'rustdesk-mobile-mouse tap=' + label + ' button=' + plan.button.toString());
+      } else {
+        this.sendRustDeskMobileMouseButton(plan.button, true);
+        hilog.info(RD_DOMAIN, RD_TAG,
+          'rustdesk-mobile-mouse hold=' + label + ' button=' + plan.button.toString() +
+          ' holdMs=' + plan.holdMs.toString());
+        setTimeout((): void => {
+          this.sendRustDeskMobileMouseButton(plan.button, false);
+        }, plan.holdMs);
+      }
+    } catch (err) {
+      hilog.error(RD_DOMAIN, RD_TAG, 'rustdesk-mobile-action failed: ' + JSON.stringify(err));
+    }
+  }
+
+  /** 直接发送鼠标按钮事件 (绕过左右键交换, 坐标锚定当前远端光标)。 */
+  private sendRustDeskMobileMouseButton(button: number, pressed: boolean): void {
+    if (!this.canForwardInput('mouseButton')) {
+      return;
+    }
+    const src = this.toSourceSpace(this.remoteCursorX, this.remoteCursorY);
+    this.loader.sendMouse(this.sessionId, src['x'], src['y'], button, pressed);
+  }
+
   aboutToDisappear(): void {
     this.clearVncToolbarAutoCollapse();
     this.releaseCanvasPinchInput('page-disappear');
@@ -6613,6 +6750,7 @@ struct RemoteDesktop {
     this.remotePointerFocusRecoveryNeeded = false;
     this.releaseAllHeldKeys();
     this.stopRustDeskDiagnosticsPolling(true);
+    this.stopRustDeskPeerIdentityPolling();
     this.stopRdpDiagnosticsPolling(true);
     this.clearRdpTransferStatusPolling(false);
     try {
@@ -10505,6 +10643,9 @@ struct RemoteDesktop {
       this.connectionProgressMessage = '';
       this.connectionError = '';
       this.connectionErrorDetail = '';
+      if (host.protocol === 'rustdesk') {
+        this.startRustDeskPeerIdentityPolling();
+      }
       if (host.protocol === 'vnc') {
         this.vncToolbarCollapsed = false;
         this.scheduleVncToolbarAutoCollapse(sid);
@@ -10728,14 +10869,23 @@ struct RemoteDesktop {
       canUseRustDeskAdaptiveOrientation(protocol, host.rustdeskTargetDevice,
         host.rustdeskAdaptiveOrientation, host.sourceType, host.rustdeskProManaged,
         host.rustdeskProPlatform);
+    // 优先使用实际对端平台 (PeerInfo 到达后), 未知时回退主机配置的目标设备。
+    // 手机对端默认竖屏, 电脑对端默认横屏。
+    const phonePeer: boolean = this.rustDeskPeerPlatform.trim() !== '' ?
+      isRustDeskMobilePlatform(this.rustDeskPeerPlatform) :
+      (host !== null && normalizeRustDeskTargetDevice(host.rustdeskTargetDevice) === 'phone');
     const policy = rustDeskOrientationPolicy(protocol, this.isDesktopDevice,
-      this.connected, this.renderPreservedInPip, adaptiveOrientationEnabled, sessionPending);
+      this.connected, this.renderPreservedInPip, adaptiveOrientationEnabled, sessionPending,
+      phonePeer);
     if (policy === 'auto-rotate') {
       await this.setPreferredOrientation(window.Orientation.AUTO_ROTATION,
         'RUSTDESK-AUTO-ROTATION-' + reason);
     } else if (policy === 'landscape') {
       await this.setPreferredOrientation(window.Orientation.LANDSCAPE,
         'RUSTDESK-LANDSCAPE-' + reason);
+    } else if (policy === 'portrait') {
+      await this.setPreferredOrientation(window.Orientation.PORTRAIT,
+        'RUSTDESK-PORTRAIT-' + reason);
     }
   }
 
@@ -13688,9 +13838,19 @@ struct RemoteDesktop {
         this.touchLastLocalY = movePoint.y;
         const dx: number = movePoint.x - this.touchStartLocalX;
         const dy: number = movePoint.y - this.touchStartLocalY;
-        if (Math.sqrt(dx * dx + dy * dy) > TOUCH_CLICK_SLOP_PX) {
+        // 三指手势仅在全部手指按下期间计为移动; 手指逐根抬起时剩余触点
+        // 的质心跳变不是用户移动, 否则会吞掉三指点击 (控制面板开关)。
+        if (Math.sqrt(dx * dx + dy * dy) > TOUCH_CLICK_SLOP_PX &&
+          shouldMarkTouchMoved(this.touchMaxFingers, this.touchFingerCount)) {
           this.touchMoved = true;
           this.clearTouchRightClickTimer();
+        }
+
+        if (this.touchMaxFingers >= 3) {
+          // 三指手势不触发双指平移/滚动: 抬起过程中剩余触点的质心跳变会被
+          // 双指滚动路径误判为滚轮并置 touchMoved=true, 导致三指点击
+          // 时灵时不灵。三指移动只更新 touchMoved 供点击/拖动区分。
+          return;
         }
 
         if (this.touchFingerCount >= 2) {
@@ -13899,6 +14059,22 @@ struct RemoteDesktop {
         this.startDirectTouchRightClickTimer();
       } else if (event.type === TouchType.Move) {
         this.touchFingerCount = this.trackedCanvasTouchCount(event);
+        if (this.touchMaxFingers >= 3) {
+          // 三指手势不触发双指平移/滚动 (同 touchpad 模式): 抬起过程中
+          // 剩余触点的质心跳变会被双指滚动/平移路径误判并置
+          // touchMoved=true, 导致三指点击时灵时不灵。只更新移动判定。
+          const avg: LocalPoint | null = this.averageTouchPoint(event);
+          if (avg !== null) {
+            const dx: number = avg.x - this.touchStartLocalX;
+            const dy: number = avg.y - this.touchStartLocalY;
+            if (Math.sqrt(dx * dx + dy * dy) > TOUCH_CLICK_SLOP_PX &&
+              shouldMarkTouchMoved(this.touchMaxFingers, this.touchFingerCount)) {
+              this.touchMoved = true;
+              this.touchDragPending = false;
+            }
+          }
+          return;
+        }
         if (this.touchMaxFingers >= 2) {
           const avg: LocalPoint | null = this.averageTouchPoint(event);
           if (avg) {
@@ -13922,7 +14098,10 @@ struct RemoteDesktop {
             }
             const dx: number = avg.x - this.touchStartLocalX;
             const dy: number = avg.y - this.touchStartLocalY;
-            if (Math.sqrt(dx * dx + dy * dy) > TOUCH_CLICK_SLOP_PX) {
+            // 三指手势仅在全部手指按下期间计为移动; 手指逐根抬起时剩余触点
+            // 的质心跳变不是用户移动, 否则会吞掉三指点击 (控制面板开关)。
+            if (Math.sqrt(dx * dx + dy * dy) > TOUCH_CLICK_SLOP_PX &&
+              shouldMarkTouchMoved(this.touchMaxFingers, this.touchFingerCount)) {
               this.touchMoved = true;
               this.touchDragPending = false;
             }
@@ -15246,6 +15425,7 @@ struct RemoteDesktop {
           rustDeskDisplaySwitchState: this.rustDeskDisplaySwitchState,
           pendingDisplayResolution: this.rustDeskDisplayPendingResolution,
           capabilities: this.currentSessionCapabilities(),
+          peerMobileActionsEnabled: this.rustDeskMobileActionsAvailable(),
           actions: this.rustDeskTopBarActions()
         })
       }
@@ -15679,6 +15859,7 @@ struct RemoteDesktop {
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
     .overlay(this.passphraseOverlay(), { align: Alignment.Top })
     .bindSheet($$this.showControlPanel, this.controlPanelBuilder(), {
+      height: SheetSize.FIT_CONTENT,
       preferType: SheetType.CENTER,
       backgroundColor: this.pal().sheetBg,
       onDisappear: (): void => { this.handleControlPanelDisappear(); }
@@ -15791,6 +15972,28 @@ struct RemoteDesktop {
     .position({ x: '4%', y: '84%' })
   }
 
+  @Builder controlPanelMobileActionRow(start: number, end: number) {
+    Row() {
+      ForEach(RUSTDESK_MOBILE_ACTIONS.slice(start, end), (action: RustDeskMobileAction) => {
+        Column() {
+          Text(action.label).fontSize(13).fontColor(this.pal().text)
+            .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .height(40).layoutWeight(1)
+        .justifyContent(FlexAlign.Center)
+        .borderRadius(10)
+        .backgroundColor(this.pal().card)
+        .border({ width: 1, color: this.pal().cardBorder })
+        .margin({ left: 6, right: 6 })
+        .onClick(() => {
+          this.sendRustDeskMobileActionTap(action.id, action.label);
+        })
+      }, (action: RustDeskMobileAction): string => action.id)
+    }
+    .width('100%')
+    .margin({ left: 18, right: 18, bottom: 14 })
+  }
+
   @Builder controlPanelBuilder() {
     Column() {
       Text('控制面板')
@@ -15805,6 +16008,16 @@ struct RemoteDesktop {
             .fontSize(12).fontColor(this.pal().text3).layoutWeight(1)
         }
         .width('100%').padding({ left: 24, right: 24, bottom: 14 })
+      }
+      // Android 被控端移动设备操作 — 三指控制面板始终可达 (含手机触摸模式)
+      if (this.rustDeskMobileActionsAvailable()) {
+        Text('移动设备操作')
+          .fontSize(13).fontWeight(FontWeight.Medium)
+          .fontColor(this.pal().text2)
+          .margin({ left: 24, right: 24, bottom: 8 })
+          .alignSelf(ItemAlign.Start)
+        this.controlPanelMobileActionRow(0, 3)
+        this.controlPanelMobileActionRow(3, 6)
       }
       // 键盘按钮
       Row() {

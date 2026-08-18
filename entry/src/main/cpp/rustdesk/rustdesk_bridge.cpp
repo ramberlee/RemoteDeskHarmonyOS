@@ -71,6 +71,15 @@ extern "C" {
     bool  rustdesk_submit_2fa(const char* code);
     bool  rustdesk_submit_2fa_for_session(uint64_t session_id, const char* code);
     void  rustdesk_send_key(void* handle, unsigned int scancode, bool pressed);
+    void  rustdesk_send_mobile_key(void* handle, unsigned int key_code, bool pressed);
+    struct RustDeskFfiPeerSnapshot {
+        uint8_t available;
+        uint8_t platform_len;
+        uint8_t platform[32];
+        uint8_t version_len;
+        uint8_t version[32];
+    };
+    bool  rustdesk_get_peer_snapshot(void* handle, RustDeskFfiPeerSnapshot* out_snapshot);
     void  rustdesk_send_mouse(void* handle, int x, int y, unsigned int button, bool pressed);
     void  rustdesk_send_mouse_wheel(void* handle, int x, int y, int delta);
     bool  rustdesk_send_mouse_wheel_2d(void* handle, int x, int y);
@@ -187,6 +196,16 @@ static_assert(offsetof(RustDeskFfiDisplaySnapshot, geometryEpoch) == 28);
 static_assert(offsetof(RustDeskFfiDisplaySnapshot, resolutionCount) == 32);
 static_assert(sizeof(RustDeskFfiResolution) == 8,
               "RustDeskResolution ABI size changed; update both sides together");
+// Peer snapshot is u8/u8/[u8;32]/u8/[u8;32] with alignment 1 on both sides.
+static_assert(sizeof(RustDeskFfiPeerSnapshot) == 67,
+              "RustDeskPeerSnapshot ABI size changed; update both sides together");
+static_assert(alignof(RustDeskFfiPeerSnapshot) == 1,
+              "RustDeskPeerSnapshot ABI alignment changed");
+static_assert(offsetof(RustDeskFfiPeerSnapshot, available) == 0);
+static_assert(offsetof(RustDeskFfiPeerSnapshot, platform_len) == 1);
+static_assert(offsetof(RustDeskFfiPeerSnapshot, platform) == 2);
+static_assert(offsetof(RustDeskFfiPeerSnapshot, version_len) == 34);
+static_assert(offsetof(RustDeskFfiPeerSnapshot, version) == 35);
 static_assert(sizeof(RustDeskFfiDisplayInfoSnapshot) == 176,
               "RustDeskDisplayInfoSnapshot ABI size changed; update both sides together");
 static_assert(alignof(RustDeskFfiDisplayInfoSnapshot) == 4,
@@ -595,6 +614,7 @@ static void* rdHelperThreadFn(void* arg) {
                 case RD_IPC_INPUT_MOUSE:  // 0x11
                 case RD_IPC_INPUT_WHEEL:  // 0x12
                 case RD_IPC_INPUT_TEXT:   // 0x13
+                case RD_IPC_INPUT_MOBILE_KEY: // 0x14
                     break;  // TODO: 转发到 RustDesk core
                 case RD_IPC_PING: {       // 0xFE → PONG
                     uint8_t pong[6] = {1, 0, 0, 0, RD_IPC_PONG, 0};
@@ -939,6 +959,7 @@ static std::atomic<uint64_t> g_ffiVideoFrameCount {0};
 static std::atomic<uint64_t> g_ffiAudioFrameCount {0};
 static std::atomic<uint64_t> g_ffiMouseSendCount {0};
 static std::atomic<uint64_t> g_ffiKeySendCount {0};
+static std::atomic<uint64_t> g_ffiMobileKeySendCount {0};
 static std::atomic<uint64_t> g_ffiWheelSendCount {0};
 static std::atomic<uint64_t> g_ffiCursorCacheMissCount {0};
 static std::atomic<uint64_t> g_ffiTextSendCount {0};
@@ -3042,6 +3063,65 @@ void RustDeskBridge::sendKey(uint32_t scancode, bool pressed) {
         send(impl_->ipcFd, buf, sizeof(buf), 0);
     }
     OH_LOG_DEBUG(LOG_APP, "[RustDesk] key sc=%{public}u p=%{public}s", scancode, pressed ? "down" : "up");
+}
+
+void RustDeskBridge::sendMobileKey(uint32_t keyCode, bool pressed) {
+#ifdef RUSTDESK_USE_REAL_CORE
+    auto handleLease = impl_->displayControl.acquireHandle();
+    if (mode_ == RustDeskMode::FFI && handleLease) {
+        uint64_t index = ++g_ffiMobileKeySendCount;
+        if (index <= 20 || index % 100 == 0) {
+            OH_LOG_INFO(LOG_APP,
+                "[RustDesk-FFI] sendMobileKey #%{public}llu keyCode=%{public}u pressed=%{public}s",
+                static_cast<unsigned long long>(index),
+                keyCode,
+                pressed ? "yes" : "no");
+        }
+        rustdesk_send_mobile_key(handleLease.get(), keyCode, pressed);
+        return;
+    }
+#endif
+    if (mode_ == RustDeskMode::IPC && impl_->ipcFd >= 0) {
+        RdIpcMobileKeyEvent ev = {keyCode, static_cast<uint8_t>(pressed ? 1 : 0)};
+        uint8_t buf[5 + sizeof(ev)];
+        RdIpcFrame::writeHeader(buf, sizeof(buf), RD_IPC_INPUT_MOBILE_KEY, sizeof(ev));
+        memcpy(buf + 5, &ev, sizeof(ev));
+        send(impl_->ipcFd, buf, sizeof(buf), 0);
+        return;
+    }
+    OH_LOG_DEBUG(LOG_APP, "[RustDesk] mobile key code=%{public}u p=%{public}s",
+                 keyCode, pressed ? "down" : "up");
+}
+
+std::string RustDeskBridge::peerPlatform() {
+    return peerIdentity().platform;
+}
+
+std::string RustDeskBridge::peerVersion() {
+    return peerIdentity().version;
+}
+
+// Mobile actions are FFI-only today: the IPC helper drops input events and
+// peer identity is only published by the FFI core. IPC-mode callers get empty
+// strings, which the ArkTS policy layer treats as "not available".
+RustDeskPeerIdentity RustDeskBridge::peerIdentity() const {
+    RustDeskPeerIdentity identity;
+#ifdef RUSTDESK_USE_REAL_CORE
+    auto handleLease = impl_->displayControl.acquireHandle();
+    if (mode_ == RustDeskMode::FFI && handleLease) {
+        RustDeskFfiPeerSnapshot snapshot = {};
+        if (rustdesk_get_peer_snapshot(handleLease.get(), &snapshot)) {
+            identity.available = snapshot.available != 0;
+            const size_t platformLen = std::min<size_t>(snapshot.platform_len, sizeof(snapshot.platform));
+            identity.platform.assign(reinterpret_cast<const char*>(snapshot.platform), platformLen);
+            const size_t versionLen = std::min<size_t>(snapshot.version_len, sizeof(snapshot.version));
+            identity.version.assign(reinterpret_cast<const char*>(snapshot.version), versionLen);
+        }
+    }
+#else
+    (void)mode_;
+#endif
+    return identity;
 }
 
 void RustDeskBridge::sendMouse(int x, int y, MouseButton button, bool pressed) {
